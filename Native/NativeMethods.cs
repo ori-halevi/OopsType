@@ -37,6 +37,8 @@ internal static class NativeMethods
 
     // ---- Hooks ----
     public const int WH_KEYBOARD_LL = 13;
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_MOUSEMOVE = 0x0200;
 
     // ---- GetLocaleInfo ----
     public const uint LOCALE_SISO639LANGNAME = 0x0059;
@@ -77,6 +79,8 @@ internal static class NativeMethods
         int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     // ---- user32 ----
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -140,6 +144,10 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn,
+        IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookExW")]
+    public static extern IntPtr SetWindowsHookExMouse(int idHook, LowLevelMouseProc lpfn,
         IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]

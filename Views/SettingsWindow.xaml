@@ -60,6 +60,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Label Grid.Row="0" Grid.Column="0" Content="Offset X"/>
                         <TextBox Grid.Row="0" Grid.Column="1" Margin="0,4,12,0" Text="{Binding MouseOffsetX}"/>
@@ -73,7 +74,15 @@
                                   IsEditable="True"/>
                         <Label Grid.Row="1" Grid.Column="2" Content="Font size"/>
                         <TextBox Grid.Row="1" Grid.Column="3" Margin="0,4,0,0" Text="{Binding MouseSize}"/>
+
+                        <Label Grid.Row="2" Grid.Column="0" Content="Tracking"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,4,0,0"
+                                  ItemsSource="{Binding MouseTrackingModes}"
+                                  SelectedItem="{Binding MouseTrackingMode}"/>
                     </Grid>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#666"
+                               IsEnabled="{Binding MouseEnabled}"
+                               Text="Economy: label only works while the mouse moves; idle at rest (recommended, especially on laptops). Max-smoothness: marginally snappier first-frame response, at the cost of higher background CPU/battery."/>
                 </StackPanel>
             </GroupBox>
 

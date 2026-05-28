@@ -30,6 +30,15 @@ public sealed class MouseLabelSettings
     public int OffsetY { get; set; } = 12;
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
+
+    /// <summary>
+    /// "economy" (default) — subscribe to CompositionTarget.Rendering only while the mouse is
+    /// moving (driven by a global mouse hook), unsubscribe shortly after it stops. Zero work at
+    /// idle, fits 24/7 use and laptops.
+    /// "max-smoothness" — keep the Rendering subscription alive permanently. Marginally snappier
+    /// on the first frame of motion, at the cost of a per-frame tick that never stops.
+    /// </summary>
+    public string TrackingMode { get; set; } = "economy";
 }
 
 public sealed class TaskbarStripSettings

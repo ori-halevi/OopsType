@@ -38,6 +38,7 @@ public sealed class SettingsViewModel : BindableBase
         _mouseOffsetY = s.MouseLabel.OffsetY;
         _mouseFont = s.MouseLabel.Font;
         _mouseSize = s.MouseLabel.Size;
+        _mouseTrackingMode = NormalizeTrackingMode(s.MouseLabel.TrackingMode);
 
         _stripEnabled = s.TaskbarStrip.Enabled;
         _stripThickness = s.TaskbarStrip.Thickness;
@@ -97,6 +98,13 @@ public sealed class SettingsViewModel : BindableBase
     public string MouseFont { get => _mouseFont; set => SetProperty(ref _mouseFont, value); }
     private int _mouseSize;
     public int MouseSize { get => _mouseSize; set => SetProperty(ref _mouseSize, value); }
+
+    public string[] MouseTrackingModes { get; } = new[] { "economy", "max-smoothness" };
+    private string _mouseTrackingMode;
+    public string MouseTrackingMode { get => _mouseTrackingMode; set => SetProperty(ref _mouseTrackingMode, value); }
+
+    private static string NormalizeTrackingMode(string? mode) =>
+        string.Equals(mode, "max-smoothness", StringComparison.OrdinalIgnoreCase) ? "max-smoothness" : "economy";
 
     // ---- Strip ----
     private bool _stripEnabled;
@@ -211,6 +219,7 @@ public sealed class SettingsViewModel : BindableBase
         s.MouseLabel.OffsetY = MouseOffsetY;
         s.MouseLabel.Font = MouseFont;
         s.MouseLabel.Size = MouseSize;
+        s.MouseLabel.TrackingMode = NormalizeTrackingMode(MouseTrackingMode);
 
         s.TaskbarStrip.Enabled = StripEnabled;
         s.TaskbarStrip.Thickness = StripThickness ?? "small";

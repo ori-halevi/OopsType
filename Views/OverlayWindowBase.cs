@@ -8,6 +8,11 @@ namespace OopsType.Views;
 public abstract class OverlayWindowBase : Window
 {
     private IntPtr _hwnd;
+    // DPI is read on every move; resolving it via PresentationSource.FromVisual walks the visual
+    // tree and is wasteful for a per-frame call. Cache it and invalidate on DpiChanged (which
+    // fires when the window crosses monitors with different DPIs — required for correctness on
+    // mixed-DPI setups, not just an optimization).
+    private (double X, double Y)? _dpiCache;
 
     protected OverlayWindowBase()
     {
@@ -82,14 +87,26 @@ public abstract class OverlayWindowBase : Window
         if (Visibility != Visibility.Visible) Show();
     }
 
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _dpiCache = null;
+    }
+
     private (double X, double Y) GetDpi()
     {
+        if (_dpiCache is { } cached) return cached;
+
         var src = PresentationSource.FromVisual(this);
         if (src?.CompositionTarget != null)
         {
             var m = src.CompositionTarget.TransformToDevice;
-            return (m.M11, m.M22);
+            var v = (m.M11, m.M22);
+            _dpiCache = v;
+            return v;
         }
+        // Pre-Show: PresentationSource is null. Don't cache the fallback or we'd be stuck at 1.0
+        // forever; let the next call re-resolve.
         return (1.0, 1.0);
     }
 }
