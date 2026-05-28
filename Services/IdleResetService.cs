@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Threading;
+using OopsType.Infrastructure;
 
 namespace OopsType.Services;
 
@@ -15,6 +16,7 @@ public sealed class IdleResetService : IIdleResetService
     private readonly ISettingsService _settings;
     private readonly IKeyboardActivityService _activity;
     private readonly IKeyboardLayoutService _layout;
+    private readonly IErrorReporter _reporter;
     private readonly DispatcherTimer _tick;
 
     // Latch: once we've reset for this idle stretch, don't reset again until the user types.
@@ -24,14 +26,16 @@ public sealed class IdleResetService : IIdleResetService
     public IdleResetService(
         ISettingsService settings,
         IKeyboardActivityService activity,
-        IKeyboardLayoutService layout)
+        IKeyboardLayoutService layout,
+        IErrorReporter reporter)
     {
         _settings = settings;
         _activity = activity;
         _layout = layout;
+        _reporter = reporter;
 
         _tick = new DispatcherTimer(DispatcherPriority.Background) { Interval = TickInterval };
-        _tick.Tick += (_, _) => Check();
+        _tick.Tick += (_, _) => Safe.Invoke(_reporter, "IdleResetService.Tick", Check);
     }
 
     public void Start()

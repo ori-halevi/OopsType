@@ -1,3 +1,6 @@
+using System;
+using OopsType.Infrastructure;
+
 namespace OopsType.Services;
 
 /// <summary>
@@ -13,6 +16,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
     private readonly IOverlayCoordinator _overlays;
     private readonly ITrayPresenter _tray;
     private readonly ISettingsDialog _settingsDialog;
+    private readonly IErrorReporter _reporter;
 
     public ApplicationLifecycle(
         ISettingsService settings,
@@ -21,7 +25,8 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         IIdleResetService idle,
         IOverlayCoordinator overlays,
         ITrayPresenter tray,
-        ISettingsDialog settingsDialog)
+        ISettingsDialog settingsDialog,
+        IErrorReporter reporter)
     {
         _settings = settings;
         _layout = layout;
@@ -30,28 +35,43 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         _overlays = overlays;
         _tray = tray;
         _settingsDialog = settingsDialog;
+        _reporter = reporter;
     }
 
     public void Start()
     {
         // Order matters: layout/activity feed events into idle reset and overlays.
-        _layout.Start();
-        _activity.Start();
-        _idle.Start();
-        _overlays.Start();
-        _tray.Start();
+        // One service's startup failure must not prevent the rest — degraded operation beats
+        // a black-screen launch (no tray icon, no way to quit).
+        SafeStart("KeyboardLayoutService", _layout.Start);
+        SafeStart("KeyboardActivityService", _activity.Start);
+        SafeStart("IdleResetService", _idle.Start);
+        SafeStart("OverlayCoordinator", _overlays.Start);
+        SafeStart("TrayPresenter", _tray.Start);
 
         if (_settings.IsFirstLaunch)
-            _settingsDialog.Show();
+            SafeStart("FirstRunDialog", _settingsDialog.Show);
     }
 
     public void Stop()
     {
         // Reverse-order teardown so listeners are gone before publishers raise their last events.
-        _overlays.Shutdown();
-        _idle.Dispose();
-        _activity.Dispose();
-        _layout.Dispose();
-        _tray.Dispose();
+        SafeStop("OverlayCoordinator", _overlays.Shutdown);
+        SafeStop("IdleResetService", _idle.Dispose);
+        SafeStop("KeyboardActivityService", _activity.Dispose);
+        SafeStop("KeyboardLayoutService", _layout.Dispose);
+        SafeStop("TrayPresenter", _tray.Dispose);
+    }
+
+    private void SafeStart(string name, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { _reporter.Report($"Lifecycle.Start/{name}", ex); }
+    }
+
+    private void SafeStop(string name, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { _reporter.Report($"Lifecycle.Stop/{name}", ex); }
     }
 }

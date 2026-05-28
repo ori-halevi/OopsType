@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Threading;
+using OopsType.Infrastructure;
 using OopsType.Services.Overlays;
 
 namespace OopsType.Services;
@@ -18,16 +19,19 @@ public sealed class OverlayCoordinator : IOverlayCoordinator
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMilliseconds(1500);
 
     private readonly ISettingsService _settings;
+    private readonly IErrorReporter _reporter;
     private readonly IReadOnlyList<IOverlayPresenter> _presenters;
     private DispatcherTimer? _heartbeat;
 
     public OverlayCoordinator(
         ISettingsService settings,
+        IErrorReporter reporter,
         CaretOverlayPresenter caret,
         MouseOverlayPresenter mouse,
         TaskbarStripOverlayPresenter strip)
     {
         _settings = settings;
+        _reporter = reporter;
         _presenters = new IOverlayPresenter[] { caret, mouse, strip };
     }
 
@@ -37,18 +41,21 @@ public sealed class OverlayCoordinator : IOverlayCoordinator
         ApplySettings();
 
         _heartbeat = new DispatcherTimer(DispatcherPriority.Background) { Interval = HeartbeatInterval };
-        _heartbeat.Tick += (_, _) => RunHeartbeat();
+        _heartbeat.Tick += (_, _) => Safe.Invoke(_reporter, "OverlayCoordinator.Heartbeat", RunHeartbeat);
         _heartbeat.Start();
     }
 
     public void ApplySettings()
     {
-        foreach (var p in _presenters) p.ApplySettings();
+        // One presenter throwing must not skip the others — isolate each.
+        foreach (var p in _presenters)
+            Safe.Invoke(_reporter, $"OverlayCoordinator.ApplySettings/{p.GetType().Name}", p.ApplySettings);
     }
 
     private void RunHeartbeat()
     {
-        foreach (var p in _presenters) p.Heartbeat();
+        foreach (var p in _presenters)
+            Safe.Invoke(_reporter, $"OverlayCoordinator.Heartbeat/{p.GetType().Name}", p.Heartbeat);
     }
 
     public void Shutdown()
@@ -57,6 +64,10 @@ public sealed class OverlayCoordinator : IOverlayCoordinator
         _heartbeat = null;
         _settings.Changed -= ApplySettings;
 
-        foreach (var p in _presenters) p.Dispose();
+        foreach (var p in _presenters)
+        {
+            try { p.Dispose(); }
+            catch (Exception ex) { _reporter.Report($"OverlayCoordinator.Shutdown/{p.GetType().Name}", ex); }
+        }
     }
 }

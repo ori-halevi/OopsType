@@ -1,5 +1,8 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
+using OopsType.Infrastructure;
 using OopsType.Services;
 using OopsType.Services.Overlays;
 using OopsType.ViewModels;
@@ -16,12 +19,18 @@ namespace OopsType;
 public partial class App
 {
     private IApplicationLifecycle? _lifecycle;
+    private IErrorReporter? _reporter;
 
     /// <summary>This app has no main window — every window (overlays, settings) is created on demand.</summary>
     protected override Window? CreateShell() => null;
 
     protected override void RegisterTypes(IContainerRegistry c)
     {
+        // ---- Diagnostics (singletons — every catch block in the app calls into these) ----
+        c.RegisterSingleton<ILogger, Logger>();
+        c.RegisterSingleton<IErrorReporter, ErrorReporter>();
+        c.RegisterSingleton<IToastService, ToastService>();
+
         // ---- Domain / infrastructure services (singletons — global state) ----
         c.RegisterSingleton<ITransparencyDetector, TransparencyDetector>();
         c.RegisterSingleton<ISettingsService, SettingsService>();
@@ -69,14 +78,59 @@ public partial class App
 
     protected override void OnInitialized()
     {
+        // Wire global exception handlers BEFORE starting services — a hook constructor or
+        // settings load could itself throw, and we want those caught too.
+        _reporter = Container.Resolve<IErrorReporter>();
+        WireGlobalExceptionHandlers(_reporter);
+
         base.OnInitialized();
-        _lifecycle = Container.Resolve<IApplicationLifecycle>();
-        _lifecycle.Start();
+
+        try
+        {
+            _lifecycle = Container.Resolve<IApplicationLifecycle>();
+            _lifecycle.Start();
+        }
+        catch (Exception ex)
+        {
+            // Startup failure: log, surface, then stay alive in degraded mode so the tray icon
+            // can still show (if it got that far) — the user sees the balloon and the log path.
+            _reporter.Report("Startup", ex);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _lifecycle?.Stop();
+        try { _lifecycle?.Stop(); }
+        catch (Exception ex) { _reporter?.Report("Shutdown", ex); }
         base.OnExit(e);
+    }
+
+    private void WireGlobalExceptionHandlers(IErrorReporter reporter)
+    {
+        // UI-thread unhandled (most timer ticks, hook subscribers, settings save UI path).
+        // Setting e.Handled = true keeps the app alive — the catch site can't know whether the
+        // exception is recoverable, but for a tray-resident utility "stay running and log" beats
+        // "die with a Watson dialog".
+        DispatcherUnhandledException += (_, e) =>
+        {
+            reporter.Report("DispatcherUnhandledException", e.Exception);
+            e.Handled = true;
+        };
+
+        // Background threads / finalizer / thread-pool throws. IsTerminating==true means CLR is
+        // about to tear down — we can't prevent that, just make sure the cause is on disk.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                reporter.Report("AppDomain.UnhandledException", ex);
+        };
+
+        // Fire-and-forget Task exceptions that nobody awaited. Marking observed prevents the
+        // process-killing escalation that some runtime configurations still apply.
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            reporter.Report("TaskScheduler.UnobservedTaskException", e.Exception);
+            e.SetObserved();
+        };
     }
 }

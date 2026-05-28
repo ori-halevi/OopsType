@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Threading;
+using OopsType.Infrastructure;
 using OopsType.ViewModels;
 using OopsType.Views;
 
@@ -23,6 +24,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     private readonly ISettingsService _settings;
     private readonly ICaretLocationService _caret;
     private readonly IKeyboardActivityService _activity;
+    private readonly IErrorReporter _reporter;
     private readonly Func<CaretLabelViewModel> _vmFactory;
     private readonly Func<CaretLabelOverlay> _viewFactory;
 
@@ -34,17 +36,21 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         ISettingsService settings,
         ICaretLocationService caret,
         IKeyboardActivityService activity,
+        IErrorReporter reporter,
         Func<CaretLabelViewModel> vmFactory,
         Func<CaretLabelOverlay> viewFactory)
     {
         _settings = settings;
         _caret = caret;
         _activity = activity;
+        _reporter = reporter;
         _vmFactory = vmFactory;
         _viewFactory = viewFactory;
 
         // Re-position immediately on every keypress so the chip "snaps" to the caret as you type.
-        _activity.KeyPressed += UpdatePosition;
+        // Wrapped — this handler runs on the LL hook callback thread (via KeyboardActivityService);
+        // we MUST NOT throw back into the hook chain.
+        _activity.KeyPressed += OnKeyPressed;
     }
 
     public void ApplySettings()
@@ -59,6 +65,9 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     {
         _overlay?.EnsureTopmost();
     }
+
+    private void OnKeyPressed() =>
+        Safe.Invoke(_reporter, "CaretOverlayPresenter.OnKeyPressed", UpdatePosition);
 
     private void EnsureCreated()
     {
@@ -76,7 +85,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         UpdatePosition();
 
         _followTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = FollowInterval };
-        _followTimer.Tick += (_, _) => UpdatePosition();
+        _followTimer.Tick += (_, _) => Safe.Invoke(_reporter, "CaretOverlayPresenter.FollowTick", UpdatePosition);
         _followTimer.Start();
     }
 
@@ -122,7 +131,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
 
     public void Dispose()
     {
-        _activity.KeyPressed -= UpdatePosition;
+        _activity.KeyPressed -= OnKeyPressed;
         EnsureDestroyed();
     }
 }

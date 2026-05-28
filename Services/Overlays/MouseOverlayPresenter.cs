@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using OopsType.Infrastructure;
 using OopsType.Native;
 using OopsType.ViewModels;
 using OopsType.Views;
@@ -53,6 +54,7 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     private static readonly TimeSpan CursorVisibilityPollDuration = TimeSpan.FromSeconds(5);
 
     private readonly ISettingsService _settings;
+    private readonly IErrorReporter _reporter;
     private readonly Func<MouseLabelViewModel> _vmFactory;
     private readonly Func<MouseLabelOverlay> _viewFactory;
 
@@ -68,10 +70,12 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
     public MouseOverlayPresenter(
         ISettingsService settings,
+        IErrorReporter reporter,
         Func<MouseLabelViewModel> vmFactory,
         Func<MouseLabelOverlay> viewFactory)
     {
         _settings = settings;
+        _reporter = reporter;
         _vmFactory = vmFactory;
         _viewFactory = viewFactory;
     }
@@ -109,7 +113,7 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         _lastMoveTicks = Stopwatch.GetTimestamp();
         UpdatePosition();
 
-        _hook = new LowLevelMouseHook();
+        _hook = new LowLevelMouseHook(_reporter);
         _hook.MouseMoved += OnMouseMoved;
     }
 
@@ -140,7 +144,8 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
     // Runs on the thread that installed the hook (the WPF UI thread — the hook is installed in
     // EnsureCreated). Must stay trivial: Windows enforces LowLevelHooksTimeout and a slow callback
-    // degrades mouse responsiveness system-wide.
+    // degrades mouse responsiveness system-wide. The hook itself already swallows our throws,
+    // but assigning to _lastMoveTicks and calling EnsureSubscribed are infallible.
     private void OnMouseMoved()
     {
         _lastMoveTicks = Stopwatch.GetTimestamp();
@@ -165,12 +170,22 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        UpdatePosition();
+        // CompositionTarget.Rendering is invoked by the WPF compositor — an unhandled throw here
+        // bubbles to DispatcherUnhandledException and (if we hadn't wired a global handler) could
+        // kill the render loop. Local catch keeps the source label precise.
+        try
+        {
+            UpdatePosition();
 
-        if (_maxSmoothness) return;
+            if (_maxSmoothness) return;
 
-        if (Stopwatch.GetElapsedTime(_lastMoveTicks) > IdleTimeout)
-            EnsureUnsubscribed();
+            if (Stopwatch.GetElapsedTime(_lastMoveTicks) > IdleTimeout)
+                EnsureUnsubscribed();
+        }
+        catch (Exception ex)
+        {
+            _reporter.Report("MouseOverlayPresenter.OnRendering", ex);
+        }
     }
 
     private void UpdatePosition()
@@ -208,18 +223,27 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
     private void OnVisibilityPollTick(object? sender, EventArgs e)
     {
-        if (_overlay == null) { StopVisibilityPoll(); return; }
-
-        if (!NativeMethods.IsCursorVisible())
+        try
         {
-            if (_overlay.Visibility != Visibility.Collapsed)
-                _overlay.Visibility = Visibility.Collapsed;
-            StopVisibilityPoll();
-            return;
-        }
+            if (_overlay == null) { StopVisibilityPoll(); return; }
 
-        if (Stopwatch.GetElapsedTime(_visibilityPollStartTicks) > CursorVisibilityPollDuration)
+            if (!NativeMethods.IsCursorVisible())
+            {
+                if (_overlay.Visibility != Visibility.Collapsed)
+                    _overlay.Visibility = Visibility.Collapsed;
+                StopVisibilityPoll();
+                return;
+            }
+
+            if (Stopwatch.GetElapsedTime(_visibilityPollStartTicks) > CursorVisibilityPollDuration)
+                StopVisibilityPoll();
+        }
+        catch (Exception ex)
+        {
+            _reporter.Report("MouseOverlayPresenter.VisibilityPoll", ex);
+            // Stop the timer on persistent failure so we don't repeatedly log the same error.
             StopVisibilityPoll();
+        }
     }
 
     public void Dispose() => EnsureDestroyed();
