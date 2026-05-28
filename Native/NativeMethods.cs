@@ -40,6 +40,10 @@ internal static class NativeMethods
     public const int WH_MOUSE_LL = 14;
     public const int WM_MOUSEMOVE = 0x0200;
 
+    // ---- Cursor visibility ----
+    public const uint CURSOR_SHOWING = 0x00000001;
+    public const uint CURSOR_SUPPRESSED = 0x00000002;
+
     // ---- GetLocaleInfo ----
     public const uint LOCALE_SISO639LANGNAME = 0x0059;
     public const uint LOCALE_SLOCALIZEDDISPLAYNAME = 0x0002;
@@ -50,6 +54,15 @@ internal static class NativeMethods
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CURSORINFO
+    {
+        public uint cbSize;
+        public uint flags;
+        public IntPtr hCursor;
+        public POINT ptScreenPos;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct GUITHREADINFO
@@ -101,6 +114,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorInfo(ref CURSORINFO pci);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -171,6 +188,16 @@ internal static class NativeMethods
 
     // ---- helpers ----
     public static int LangIdFromHkl(IntPtr hkl) => (int)((long)hkl & 0xFFFF);
+
+    // True only when the cursor is actually being drawn on screen. Returns false for both
+    // ShowCursor(FALSE) (video players' auto-hide) and CURSOR_SUPPRESSED (touch/pen input).
+    // Fail-open: if the query fails, assume visible so we never spuriously hide overlays.
+    public static bool IsCursorVisible()
+    {
+        var ci = new CURSORINFO { cbSize = (uint)Marshal.SizeOf<CURSORINFO>() };
+        if (!GetCursorInfo(ref ci)) return true;
+        return ci.flags == CURSOR_SHOWING;
+    }
 
     public static string GetWindowClass(IntPtr hwnd)
     {

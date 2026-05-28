@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using OopsType.Native;
 using OopsType.ViewModels;
 using OopsType.Views;
@@ -24,6 +25,18 @@ namespace OopsType.Services.Overlays;
 /// The hook callback must NEVER move the window itself — that would happen on the hook thread's
 /// schedule, not synchronized to a frame, reintroducing the jitter. Hook only wakes; Rendering
 /// moves.
+///
+/// Cursor-visibility handling: when the OS hides the cursor (video player auto-hide, touch/pen
+/// input), the label must hide too. During motion, <see cref="UpdatePosition"/> already calls
+/// <see cref="NativeMethods.IsCursorVisible"/> on every frame — free. The hard case is the idle
+/// state: no events fire, but the cursor can still get hidden a few seconds after the user stops
+/// moving. To stay true to "no work at rest", we run a bounded poll instead of a perpetual timer:
+/// it starts when motion ends, ticks at <see cref="CursorVisibilityPollInterval"/>, and stops on
+/// the first of (a) cursor seen hidden — overlay collapsed, nothing more to do until the next
+/// move, (b) <see cref="CursorVisibilityPollDuration"/> elapsed with the cursor still visible —
+/// we accept the rare miss where a video player hides the cursor much later than expected, or
+/// (c) motion resumes (<see cref="EnsureSubscribed"/> stops the timer). The visibility-poll
+/// constants are intentionally not user-configurable.
 /// </summary>
 public sealed class MouseOverlayPresenter : IOverlayPresenter
 {
@@ -32,6 +45,13 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     // lands within ~16ms anyway), long enough to avoid churn during tiny pauses mid-drag.
     private static readonly TimeSpan IdleTimeout = TimeSpan.FromMilliseconds(150);
 
+    // Bounded cursor-visibility poll while idle. 200ms is fast enough that a video player's
+    // auto-hide is noticed within a frame or two of human perception, slow enough to be ~5
+    // P/Invokes per second of cost. 5 seconds is generous headroom over typical auto-hide
+    // delays (~3s) so we almost always catch the transition before giving up.
+    private static readonly TimeSpan CursorVisibilityPollInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan CursorVisibilityPollDuration = TimeSpan.FromSeconds(5);
+
     private readonly ISettingsService _settings;
     private readonly Func<MouseLabelViewModel> _vmFactory;
     private readonly Func<MouseLabelOverlay> _viewFactory;
@@ -39,6 +59,8 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     private MouseLabelOverlay? _overlay;
     private MouseLabelViewModel? _viewModel;
     private LowLevelMouseHook? _hook;
+    private DispatcherTimer? _visibilityPollTimer;
+    private long _visibilityPollStartTicks;
 
     private bool _renderingSubscribed;
     private long _lastMoveTicks;
@@ -95,7 +117,12 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     {
         if (_overlay == null) return;
 
-        EnsureUnsubscribed();
+        StopVisibilityPoll();
+        if (_renderingSubscribed)
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            _renderingSubscribed = false;
+        }
 
         if (_hook != null)
         {
@@ -124,6 +151,7 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     {
         if (_renderingSubscribed) return;
         _renderingSubscribed = true;
+        StopVisibilityPoll();
         CompositionTarget.Rendering += OnRendering;
     }
 
@@ -132,6 +160,7 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         if (!_renderingSubscribed) return;
         _renderingSubscribed = false;
         CompositionTarget.Rendering -= OnRendering;
+        StartVisibilityPoll();
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -147,12 +176,50 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     private void UpdatePosition()
     {
         if (_overlay == null) return;
+
+        if (!NativeMethods.IsCursorVisible())
+        {
+            if (_overlay.Visibility != Visibility.Collapsed)
+                _overlay.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         if (!NativeMethods.GetCursorPos(out var p)) return;
 
         var settings = _settings.Current.MouseLabel;
         _overlay.PositionInScreenPixels(p.X + settings.OffsetX, p.Y + settings.OffsetY);
         if (_overlay.Visibility != Visibility.Visible)
             _overlay.Visibility = Visibility.Visible;
+    }
+
+    private void StartVisibilityPoll()
+    {
+        if (_overlay == null) return;
+        _visibilityPollStartTicks = Stopwatch.GetTimestamp();
+        if (_visibilityPollTimer == null)
+        {
+            _visibilityPollTimer = new DispatcherTimer { Interval = CursorVisibilityPollInterval };
+            _visibilityPollTimer.Tick += OnVisibilityPollTick;
+        }
+        _visibilityPollTimer.Start();
+    }
+
+    private void StopVisibilityPoll() => _visibilityPollTimer?.Stop();
+
+    private void OnVisibilityPollTick(object? sender, EventArgs e)
+    {
+        if (_overlay == null) { StopVisibilityPoll(); return; }
+
+        if (!NativeMethods.IsCursorVisible())
+        {
+            if (_overlay.Visibility != Visibility.Collapsed)
+                _overlay.Visibility = Visibility.Collapsed;
+            StopVisibilityPoll();
+            return;
+        }
+
+        if (Stopwatch.GetElapsedTime(_visibilityPollStartTicks) > CursorVisibilityPollDuration)
+            StopVisibilityPoll();
     }
 
     public void Dispose() => EnsureDestroyed();
