@@ -56,8 +56,7 @@ public sealed class SettingsViewModel : BindableBase
         _autostart = _startup.IsEnabled();
 
         SaveCommand = new DelegateCommand(Apply, () => IsDirty).ObservesProperty(() => IsDirty);
-        //AddColorCommand = new DelegateCommand(AddColorRow);
-        AddColorCommand = new DelegateCommand(() => throw new Exception("Not implemented"));
+        AddColorCommand = new DelegateCommand(AddColorRow);
         RemoveColorCommand = new DelegateCommand<LangColorRow>(RemoveColorRow);
 
         // ---- dirty tracking ----
