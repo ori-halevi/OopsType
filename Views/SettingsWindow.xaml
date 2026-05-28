@@ -1,0 +1,180 @@
+<Window x:Class="OopsType.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="OopsType — Settings"
+        Width="560" Height="860"
+        WindowStartupLocation="CenterScreen"
+        FlowDirection="LeftToRight">
+    <Window.Resources>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Padding" Value="8"/>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="Margin" Value="0,4,8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+        <StackPanel>
+            <GroupBox Header="Caret label (follows text caret)">
+                <StackPanel>
+                    <CheckBox Content="Enabled" IsChecked="{Binding CaretEnabled}" Margin="0,0,0,6"/>
+                    <Grid IsEnabled="{Binding CaretEnabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Label Grid.Row="0" Grid.Column="0" Content="Offset X"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="0,4,12,0" Text="{Binding CaretOffsetX}"/>
+                        <Label Grid.Row="0" Grid.Column="2" Content="Offset Y"/>
+                        <TextBox Grid.Row="0" Grid.Column="3" Margin="0,4,0,0" Text="{Binding CaretOffsetY}"/>
+
+                        <Label Grid.Row="1" Grid.Column="0" Content="Font"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,12,0"
+                                  ItemsSource="{Binding AvailableFonts}"
+                                  SelectedItem="{Binding CaretFont}"
+                                  IsEditable="True"/>
+                        <Label Grid.Row="1" Grid.Column="2" Content="Font size"/>
+                        <TextBox Grid.Row="1" Grid.Column="3" Margin="0,4,0,0" Text="{Binding CaretSize}"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Mouse label (follows mouse cursor)">
+                <StackPanel>
+                    <CheckBox Content="Enabled" IsChecked="{Binding MouseEnabled}" Margin="0,0,0,6"/>
+                    <Grid IsEnabled="{Binding MouseEnabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Label Grid.Row="0" Grid.Column="0" Content="Offset X"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="0,4,12,0" Text="{Binding MouseOffsetX}"/>
+                        <Label Grid.Row="0" Grid.Column="2" Content="Offset Y"/>
+                        <TextBox Grid.Row="0" Grid.Column="3" Margin="0,4,0,0" Text="{Binding MouseOffsetY}"/>
+
+                        <Label Grid.Row="1" Grid.Column="0" Content="Font"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,12,0"
+                                  ItemsSource="{Binding AvailableFonts}"
+                                  SelectedItem="{Binding MouseFont}"
+                                  IsEditable="True"/>
+                        <Label Grid.Row="1" Grid.Column="2" Content="Font size"/>
+                        <TextBox Grid.Row="1" Grid.Column="3" Margin="0,4,0,0" Text="{Binding MouseSize}"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Taskbar color strip">
+                <StackPanel>
+                    <CheckBox Content="Enabled" IsChecked="{Binding StripEnabled}" Margin="0,0,0,6"/>
+                    <Grid IsEnabled="{Binding StripEnabled}" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Label Grid.Row="0" Grid.Column="0" Content="Thickness"/>
+                        <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,4,12,0"
+                                  ItemsSource="{Binding StripThicknesses}"
+                                  SelectedItem="{Binding StripThickness}"/>
+                        <Label Grid.Row="0" Grid.Column="2" Content="Vertical position"/>
+                        <ComboBox Grid.Row="0" Grid.Column="3" Margin="0,4,0,0"
+                                  ItemsSource="{Binding StripVerticalPositions}"
+                                  SelectedItem="{Binding StripVerticalPosition}"
+                                  IsEnabled="{Binding StripVerticalPositionEnabled}"/>
+
+                        <Label Grid.Row="1" Grid.Column="0" Content="Placement"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,12,0"
+                                  ItemsSource="{Binding StripPlacements}"
+                                  SelectedItem="{Binding StripPlacement}"/>
+
+                        <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
+                                  Margin="0,10,0,0"
+                                  Content="Apply transparency"
+                                  IsChecked="{Binding StripOpacityEnabled}"/>
+
+                        <Label Grid.Row="3" Grid.Column="0" Content="Opacity"/>
+                        <Slider Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,12,0"
+                                Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                                TickFrequency="0.1" IsSnapToTickEnabled="False"
+                                Value="{Binding StripOpacity}" VerticalAlignment="Center"
+                                IsEnabled="{Binding StripOpacityEnabled}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="3" Margin="0,8,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding StripOpacity, StringFormat={}{0:P0}}"
+                                   IsEnabled="{Binding StripOpacityEnabled}"/>
+                    </Grid>
+                    <DataGrid ItemsSource="{Binding ColorRows}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
+                              GridLinesVisibility="None" Height="160" IsEnabled="{Binding StripEnabled}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Lang code" Binding="{Binding Code}" Width="120"/>
+                            <DataGridTextColumn Header="Hex color" Binding="{Binding Color}" Width="*"/>
+                            <DataGridTemplateColumn Width="40">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="✕" Padding="4,0"
+                                                Command="{Binding DataContext.RemoveColorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Button Content="+ Add language" HorizontalAlignment="Left" Margin="0,6,0,0"
+                            Command="{Binding AddColorCommand}" IsEnabled="{Binding StripEnabled}"/>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Idle reset">
+                <StackPanel>
+                    <CheckBox Content="Enabled" IsChecked="{Binding IdleEnabled}" Margin="0,0,0,6"/>
+                    <Grid IsEnabled="{Binding IdleEnabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Label Grid.Column="0" Content="Idle seconds"/>
+                        <TextBox Grid.Column="1" Margin="0,4,12,0" Text="{Binding IdleSeconds}"/>
+                        <Label Grid.Column="2" Content="Target language"/>
+                        <ComboBox Grid.Column="3" Margin="0,4,0,0"
+                                  ItemsSource="{Binding AvailableCodes}"
+                                  SelectedItem="{Binding IdleTarget}"
+                                  IsEditable="True"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="General">
+                <CheckBox Content="Launch on Windows startup" IsChecked="{Binding Autostart}"/>
+            </GroupBox>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save" MinWidth="100" Padding="8,4" Command="{Binding SaveCommand}" IsDefault="True"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>
