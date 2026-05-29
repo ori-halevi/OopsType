@@ -16,6 +16,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
     private readonly IOverlayCoordinator _overlays;
     private readonly ITrayPresenter _tray;
     private readonly ISettingsDialog _settingsDialog;
+    private readonly IStartupService _startup;
     private readonly IErrorReporter _reporter;
 
     public ApplicationLifecycle(
@@ -26,6 +27,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         IOverlayCoordinator overlays,
         ITrayPresenter tray,
         ISettingsDialog settingsDialog,
+        IStartupService startup,
         IErrorReporter reporter)
     {
         _settings = settings;
@@ -35,6 +37,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         _overlays = overlays;
         _tray = tray;
         _settingsDialog = settingsDialog;
+        _startup = startup;
         _reporter = reporter;
     }
 
@@ -50,7 +53,12 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         SafeStart("TrayPresenter", _tray.Start);
 
         if (_settings.IsFirstLaunch)
+        {
+            // Default to launching with Windows on first run. Only applied once — if the user
+            // later unticks the box, we must not silently re-enable it on the next launch.
+            SafeStart("StartupService.EnableDefault", () => _startup.SetEnabled(true));
             SafeStart("FirstRunDialog", _settingsDialog.Show);
+        }
     }
 
     public void Stop()

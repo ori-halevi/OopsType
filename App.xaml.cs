@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -19,8 +20,31 @@ namespace OopsType;
 /// </summary>
 public partial class App
 {
+    // Per-user single-instance gate. The "Local\" prefix scopes the mutex to the current
+    // logon session so different users on the same machine can each run their own instance;
+    // the GUID suffix prevents collisions with unrelated apps that happen to share a name.
+    private const string SingleInstanceMutexName = @"Local\OopsType.SingleInstance.{8F2C7A14-3E5B-4E2A-9D6F-7B1C0A4F8E92}";
+    private Mutex? _singleInstanceMutex;
+
     private IApplicationLifecycle? _lifecycle;
     private IErrorReporter? _reporter;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, name: SingleInstanceMutexName, createdNew: out var createdNew);
+        if (!createdNew)
+        {
+            // Another instance already holds the mutex — release our handle without signalling
+            // and bail before any UI/hooks spin up. Shutdown() here exits cleanly without
+            // running OnInitialized/OnExit's lifecycle paths.
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+            Shutdown();
+            return;
+        }
+
+        base.OnStartup(e);
+    }
 
     /// <summary>This app has no main window — every window (overlays, settings) is created on demand.</summary>
     protected override Window? CreateShell() => null;
@@ -112,6 +136,14 @@ public partial class App
     {
         try { _lifecycle?.Stop(); }
         catch (Exception ex) { _reporter?.Report("Shutdown", ex); }
+
+        if (_singleInstanceMutex != null)
+        {
+            try { _singleInstanceMutex.ReleaseMutex(); } catch { /* not owned (early shutdown) */ }
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+        }
+
         base.OnExit(e);
     }
 
