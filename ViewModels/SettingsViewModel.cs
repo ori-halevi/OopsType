@@ -115,7 +115,15 @@ public sealed class SettingsViewModel : BindableBase
     public string StripThickness
     {
         get => _stripThickness;
-        set { if (SetProperty(ref _stripThickness, value)) RaisePropertyChanged(nameof(StripVerticalPositionEnabled)); }
+        set
+        {
+            if (SetProperty(ref _stripThickness, value))
+            {
+                RaisePropertyChanged(nameof(StripVerticalPositionEnabled));
+                RaisePropertyChanged(nameof(StripThicknessPixels));
+                RaisePropertyChanged(nameof(StripFillsTaskbar));
+            }
+        }
     }
 
     public string[] StripVerticalPositions { get; } = new[] { "top", "bottom" };
@@ -123,14 +131,34 @@ public sealed class SettingsViewModel : BindableBase
     public string StripVerticalPosition { get => _stripVerticalPosition; set => SetProperty(ref _stripVerticalPosition, value); }
 
     private bool _stripOpacityEnabled;
-    public bool StripOpacityEnabled { get => _stripOpacityEnabled; set => SetProperty(ref _stripOpacityEnabled, value); }
+    public bool StripOpacityEnabled
+    {
+        get => _stripOpacityEnabled;
+        set { if (SetProperty(ref _stripOpacityEnabled, value)) RaisePropertyChanged(nameof(EffectiveStripOpacity)); }
+    }
 
     private double _stripOpacity;
     public double StripOpacity
     {
         get => _stripOpacity;
-        set => SetProperty(ref _stripOpacity, Math.Clamp(value, 0.0, 1.0));
+        set { if (SetProperty(ref _stripOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(EffectiveStripOpacity)); }
     }
+
+    /// <summary>Effective opacity applied to the preview swatch: ignores the slider when transparency is disabled.</summary>
+    public double EffectiveStripOpacity => _stripOpacityEnabled ? _stripOpacity : 1.0;
+
+    /// <summary>Approximate pixel height the strip occupies on the preview taskbar (small/medium/large).</summary>
+    public int StripThicknessPixels => _stripThickness?.ToLowerInvariant() switch
+    {
+        "small" => 4,
+        "medium" => 7,
+        "large" => 11,
+        "full" => 22, // taskbar-fill preview height
+        _ => 4,
+    };
+
+    /// <summary>True when the strip covers the full taskbar height — the preview hides the vertical-position UI in that case.</summary>
+    public bool StripFillsTaskbar => string.Equals(_stripThickness, "full", StringComparison.OrdinalIgnoreCase);
 
     public string[] StripPlacements { get; } = new[] { "front", "behind" };
     private string _stripPlacement;
@@ -150,6 +178,34 @@ public sealed class SettingsViewModel : BindableBase
 
     private void AddColorRow() => ColorRows.Add(new LangColorRow { Code = "", Color = "#888888" });
     private void RemoveColorRow(LangColorRow? row) { if (row != null) ColorRows.Remove(row); }
+
+    /// <summary>Language code shown inside the preview cards. Uses the first configured row, or "EN" as a fallback.</summary>
+    public string PreviewCode
+    {
+        get
+        {
+            foreach (var row in ColorRows)
+            {
+                var code = (row.Code ?? "").Trim();
+                if (!string.IsNullOrEmpty(code)) return code.ToUpperInvariant();
+            }
+            return "EN";
+        }
+    }
+
+    /// <summary>Color used by the strip preview swatch. Uses the first configured row, or a neutral gray fallback.</summary>
+    public string PreviewColor
+    {
+        get
+        {
+            foreach (var row in ColorRows)
+            {
+                var c = (row.Color ?? "").Trim();
+                if (!string.IsNullOrEmpty(c)) return c;
+            }
+            return "#3B82F6";
+        }
+    }
 
     // ---- Idle ----
     private bool _idleEnabled;
@@ -182,14 +238,36 @@ public sealed class SettingsViewModel : BindableBase
 
     private void MarkDirty() { if (_initialized && !_isDirty) IsDirty = true; }
 
+    /// <summary>
+    /// Clears the dirty flag. The view calls this once after Loaded so that any binding-init
+    /// noise (editable ComboBox bouncing, NumberBox round-tripping) doesn't mark the VM dirty
+    /// before the user has touched anything.
+    /// </summary>
+    public void ResetDirty() => IsDirty = false;
+
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(IsDirty)) return;
-        if (e.PropertyName == nameof(StripVerticalPositionEnabled)) return; // computed
+        // Computed properties — their source already marks dirty when it changes.
+        switch (e.PropertyName)
+        {
+            case nameof(StripVerticalPositionEnabled):
+            case nameof(StripThicknessPixels):
+            case nameof(StripFillsTaskbar):
+            case nameof(EffectiveStripOpacity):
+            case nameof(PreviewCode):
+            case nameof(PreviewColor):
+                return;
+        }
         MarkDirty();
     }
 
-    private void OnRowChanged(object? sender, PropertyChangedEventArgs e) => MarkDirty();
+    private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        MarkDirty();
+        RaisePropertyChanged(nameof(PreviewCode));
+        RaisePropertyChanged(nameof(PreviewColor));
+    }
 
     private void OnColorRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -198,6 +276,8 @@ public sealed class SettingsViewModel : BindableBase
         if (e.OldItems != null)
             foreach (LangColorRow r in e.OldItems) r.PropertyChanged -= OnRowChanged;
         MarkDirty();
+        RaisePropertyChanged(nameof(PreviewCode));
+        RaisePropertyChanged(nameof(PreviewColor));
     }
 
     public ICommand SaveCommand { get; }
