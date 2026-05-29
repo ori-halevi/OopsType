@@ -7,7 +7,9 @@ using System.Linq;
 using System.Windows.Input;
 using System.Windows.Media;
 using OopsType.Models;
+using OopsType.Models.Localization;
 using OopsType.Services;
+using OopsType.Services.Localization;
 using Prism.Commands;
 using Prism.Mvvm;
 
@@ -18,13 +20,20 @@ public sealed class SettingsViewModel : BindableBase
     private readonly ISettingsService _settings;
     private readonly IKeyboardLayoutService _layout;
     private readonly IStartupService _startup;
+    private readonly ILocalizationService _localization;
     private readonly bool _initialized;
 
-    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup)
+    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup, ILocalizationService localization)
     {
         _settings = settings;
         _layout = layout;
         _startup = startup;
+        _localization = localization;
+
+        AvailableLanguages = new ObservableCollection<LanguagePack>(_localization.AvailableLanguages);
+        // Pre-select the saved language pack object, not just its code, so the ComboBox can
+        // bind to SelectedItem (richer than SelectedValue — gives us access to NativeName etc.)
+        _selectedLanguage = ResolveSelectedLanguage(settings.Current.General.Language);
 
         var s = _settings.Current;
         _caretEnabled = s.CaretLabel.Enabled;
@@ -228,6 +237,30 @@ public sealed class SettingsViewModel : BindableBase
     private bool _autostart;
     public bool Autostart { get => _autostart; set => SetProperty(ref _autostart, value); }
 
+    // ---- Language ----
+    public ObservableCollection<LanguagePack> AvailableLanguages { get; }
+
+    private LanguagePack? _selectedLanguage;
+    /// <summary>Selected language pack object — bound to the language ComboBox in the General tab.
+    /// May be null if no packs were discovered (degraded mode); the UI just disables the combo.</summary>
+    public LanguagePack? SelectedLanguage
+    {
+        get => _selectedLanguage;
+        set => SetProperty(ref _selectedLanguage, value);
+    }
+
+    private LanguagePack? ResolveSelectedLanguage(string code)
+    {
+        if (AvailableLanguages.Count == 0) return null;
+        foreach (var p in AvailableLanguages)
+            if (string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase)) return p;
+        // Fall back to whatever the localization service decided is current — keeps the combo
+        // in sync with what's actually rendering, even when settings hold a stale/unknown code.
+        foreach (var p in AvailableLanguages)
+            if (string.Equals(p.Code, _localization.CurrentLanguage.Code, StringComparison.OrdinalIgnoreCase)) return p;
+        return AvailableLanguages[0];
+    }
+
     // ---- Dirty tracking ----
     private bool _isDirty;
     public bool IsDirty
@@ -320,6 +353,16 @@ public sealed class SettingsViewModel : BindableBase
         s.IdleReset.TargetLang = (IdleTarget ?? "en").ToLowerInvariant();
 
         s.General.Autostart = Autostart;
+
+        // Persist the chosen language code (not the whole pack — only the code is stable across
+        // disk/runtime) and switch the active translation dictionary immediately so the user
+        // sees the new language without closing/reopening the window.
+        var chosenCode = SelectedLanguage?.Code ?? "";
+        if (s.General.Language != chosenCode)
+        {
+            s.General.Language = chosenCode;
+            _localization.SetLanguage(chosenCode);
+        }
 
         _settings.Save();
         _startup.SetEnabled(Autostart);

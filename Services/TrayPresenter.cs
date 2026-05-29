@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Windows;
 using System.Windows.Forms;
 using OopsType.Infrastructure;
+using OopsType.Services.Localization;
 using WinForms = System.Windows.Forms;
 
 namespace OopsType.Services;
@@ -21,18 +22,23 @@ public sealed class TrayPresenter : ITrayPresenter
     private readonly ISettingsDialog _settingsDialog;
     private readonly IErrorReporter _reporter;
     private readonly IToastService _toasts;
+    private readonly ILocalizationService _localization;
 
     /// <summary>Actions that refresh menu item check-states from current settings — invoked on every <c>settings.Changed</c>.</summary>
     private readonly List<Action> _refreshActions = new();
 
+    /// <summary>Actions that re-read translations into menu item text — invoked on every <c>localization.LanguageChanged</c>.</summary>
+    private readonly List<Action> _retranslateActions = new();
+
     private WinForms.NotifyIcon? _icon;
 
-    public TrayPresenter(ISettingsService settings, ISettingsDialog settingsDialog, IErrorReporter reporter, IToastService toasts)
+    public TrayPresenter(ISettingsService settings, ISettingsDialog settingsDialog, IErrorReporter reporter, IToastService toasts, ILocalizationService localization)
     {
         _settings = settings;
         _settingsDialog = settingsDialog;
         _reporter = reporter;
         _toasts = toasts;
+        _localization = localization;
     }
 
     public void Start()
@@ -52,6 +58,7 @@ public sealed class TrayPresenter : ITrayPresenter
 
             // One subscription drives every checkbox refresh instead of one handler per item.
             _settings.Changed += RefreshAllItems;
+            _localization.LanguageChanged += RetranslateAllItems;
             _reporter.Notified += OnErrorReported;
         }
         catch (Exception ex)
@@ -78,45 +85,61 @@ public sealed class TrayPresenter : ITrayPresenter
             ForeColor = FluentMenuPalette.Text,
             Padding = new Padding(4),
         };
-        menu.Items.Add("Settings…", null, (_, _) =>
+
+        AddTranslatedItem(menu, "Tray_OpenSettings", (_, _) =>
             Safe.Invoke(_reporter, "TrayPresenter.OpenSettings", _settingsDialog.Show));
         menu.Items.Add(new WinForms.ToolStripSeparator());
 
         menu.Items.Add(BuildToggleItem(
-            "Caret label",
+            "Tray_Toggle_Caret",
             () => _settings.Current.CaretLabel.Enabled,
             v => _settings.Current.CaretLabel.Enabled = v));
 
         menu.Items.Add(BuildToggleItem(
-            "Mouse label",
+            "Tray_Toggle_Mouse",
             () => _settings.Current.MouseLabel.Enabled,
             v => _settings.Current.MouseLabel.Enabled = v));
 
         menu.Items.Add(BuildToggleItem(
-            "Taskbar strip",
+            "Tray_Toggle_Strip",
             () => _settings.Current.TaskbarStrip.Enabled,
             v => _settings.Current.TaskbarStrip.Enabled = v));
 
         menu.Items.Add(BuildToggleItem(
-            "Idle reset",
+            "Tray_Toggle_Idle",
             () => _settings.Current.IdleReset.Enabled,
             v => _settings.Current.IdleReset.Enabled = v));
 
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Quit", null, (_, _) =>
+        AddTranslatedItem(menu, "Tray_Quit", (_, _) =>
             Safe.Invoke(_reporter, "TrayPresenter.Quit", () => System.Windows.Application.Current?.Shutdown()));
 
         return menu;
     }
 
     /// <summary>
-    /// Factory for a checkable menu item bound to a boolean setting. Captures the getter so this
-    /// item can be refreshed cheaply on settings change, and the setter so a user click updates
-    /// and persists the setting in one place.
+    /// Adds a non-toggle menu item whose text is sourced from the localization key and refreshed
+    /// every time <see cref="ILocalizationService.LanguageChanged"/> fires. Kept here (rather
+    /// than inlined) so every plain menu entry hooks the retranslate path uniformly.
     /// </summary>
-    private WinForms.ToolStripMenuItem BuildToggleItem(string text, Func<bool> getEnabled, Action<bool> setEnabled)
+    private void AddTranslatedItem(WinForms.ContextMenuStrip menu, string key, EventHandler onClick)
     {
-        var item = new WinForms.ToolStripMenuItem(text)
+        var item = new WinForms.ToolStripMenuItem(_localization.T(key));
+        item.Click += onClick;
+        menu.Items.Add(item);
+        _retranslateActions.Add(() => Safe.Invoke(_reporter, "TrayPresenter.RetranslateItem",
+            () => item.Text = _localization.T(key)));
+    }
+
+    /// <summary>
+    /// Factory for a checkable menu item bound to a boolean setting. The first parameter is a
+    /// localization key — the item's text is sourced from the active language pack and refreshed
+    /// when the language changes. The getter is captured for cheap settings-change refresh, and
+    /// the setter for click → update → persist in one place.
+    /// </summary>
+    private WinForms.ToolStripMenuItem BuildToggleItem(string textKey, Func<bool> getEnabled, Action<bool> setEnabled)
+    {
+        var item = new WinForms.ToolStripMenuItem(_localization.T(textKey))
         {
             CheckOnClick = true,
             Checked = SafeGet(getEnabled, false),
@@ -130,6 +153,8 @@ public sealed class TrayPresenter : ITrayPresenter
 
         _refreshActions.Add(() => Safe.Invoke(_reporter, "TrayPresenter.RefreshItem",
             () => item.Checked = getEnabled()));
+        _retranslateActions.Add(() => Safe.Invoke(_reporter, "TrayPresenter.RetranslateItem",
+            () => item.Text = _localization.T(textKey)));
         return item;
     }
 
@@ -144,38 +169,34 @@ public sealed class TrayPresenter : ITrayPresenter
         foreach (var refresh in _refreshActions) refresh();
     }
 
+    private void RetranslateAllItems()
+    {
+        foreach (var retranslate in _retranslateActions) retranslate();
+    }
+
     private void OnErrorReported(ErrorNotification n)
     {
         // IToastService marshals to the UI thread itself; we just forward. The balloon path was
         // dropped because Win10/11 routes ShowBalloonTip through Action Center, which silences
         // it under common defaults — making the notification unreliable for debugging.
         var text = string.IsNullOrEmpty(n.Message) ? n.Source : $"{n.Source}\n{n.Message}";
-        _toasts.Show("OopsType — error", Truncate(text, 400), ToastKind.Error);
+        _toasts.Show(_localization.T("Tray_ErrorToast_Title"), Truncate(text, 400), ToastKind.Error);
     }
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
 
     /// <summary>
-    /// Generates a tiny 16×16 icon at runtime so we don't ship a separate .ico resource. Looks
-    /// like a black square with a white "O". Returns null on failure — NotifyIcon tolerates that
-    /// and falls back to a system default.
+    /// Loads the shipped logo .ico from embedded WPF resources. Falls back to null on failure
+    /// so <see cref="WinForms.NotifyIcon"/> uses a system default instead of crashing.
     /// </summary>
     private static Icon? BuildTrayIcon()
     {
         try
         {
-            using var bmp = new Bitmap(16, 16);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.FillRectangle(Brushes.Black, 0, 0, 16, 16);
-                using var font = new Font("Segoe UI", 7f, System.Drawing.FontStyle.Bold);
-                using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                g.DrawString("O", font, Brushes.White, new RectangleF(0, 0, 16, 16), sf);
-            }
-            // Icon.FromHandle keeps a reference to the HICON; the Bitmap can be safely disposed.
-            return Icon.FromHandle(bmp.GetHicon());
+            var uri = new Uri("pack://application:,,,/Assets/logo.ico", UriKind.Absolute);
+            using var stream = System.Windows.Application.GetResourceStream(uri)?.Stream;
+            return stream != null ? new Icon(stream) : null;
         }
         catch
         {
@@ -189,6 +210,7 @@ public sealed class TrayPresenter : ITrayPresenter
 
         try { _reporter.Notified -= OnErrorReported; } catch { }
         try { _settings.Changed -= RefreshAllItems; } catch { }
+        try { _localization.LanguageChanged -= RetranslateAllItems; } catch { }
         try { _icon.Visible = false; } catch { }
         try { _icon.Dispose(); } catch { }
         _icon = null;

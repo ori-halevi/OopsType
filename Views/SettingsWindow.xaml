@@ -3,13 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
-        Title="OopsType — Settings"
+        xmlns:loc="clr-namespace:OopsType.Markup"
+        Title="{loc:T Window_Title}"
+        Icon="pack://application:,,,/Assets/logo.ico"
         Width="980" Height="680"
         MinWidth="860" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         WindowBackdropType="Mica"
-        ExtendsContentIntoTitleBar="True"
-        FlowDirection="LeftToRight">
+        ExtendsContentIntoTitleBar="True">
 
     <Window.Resources>
         <!-- ===== Tokens ===== -->
@@ -135,9 +136,13 @@
 
         <!-- ===== Title bar ===== -->
         <ui:TitleBar Grid.Row="0"
-                     Title="OopsType — Settings"
+                     Title="{loc:T Window_Title}"
                      ShowMaximize="False"
-                     ShowMinimize="True"/>
+                     ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Assets/logo-64.ico"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!-- ===== Sidebar + content ===== -->
         <Grid Grid.Row="1">
@@ -149,51 +154,58 @@
             <!-- Sidebar -->
             <Border Grid.Column="0" Background="#08000000" BorderBrush="#15000000" BorderThickness="0,0,1,0">
                 <StackPanel Margin="0,12,0,0">
-                    <TextBlock Text="OopsType"
-                               FontSize="18" FontWeight="SemiBold"
-                               Margin="20,4,0,2"
-                               Foreground="{DynamicResource AccentText}"/>
-                    <TextBlock Text="Keyboard-layout overlays"
-                               FontSize="11" Margin="20,0,0,18"
-                               Foreground="{DynamicResource SubtleText}"/>
+                    <StackPanel Orientation="Horizontal" Margin="16,4,16,18">
+                        <Image Source="pack://application:,,,/Assets/logo.png"
+                               Width="40" Height="40"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               VerticalAlignment="Center"/>
+                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:T Nav_AppName}"
+                                       FontSize="18" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentText}"/>
+                            <TextBlock Text="{loc:T Nav_Subtitle}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SubtleText}"/>
+                        </StackPanel>
+                    </StackPanel>
 
                     <RadioButton x:Name="NavCaret" Style="{StaticResource NavItem}" IsChecked="True"
-                                 ToolTip="Settings for the small language label that follows your text caret">
+                                 ToolTip="{loc:T Nav_CaretLabel_Tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="TextField20" FontSize="18" Margin="0,0,10,0"/>
-                            <TextBlock Text="Caret label" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:T Nav_CaretLabel}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="NavMouse" Style="{StaticResource NavItem}"
-                                 ToolTip="Settings for the language label that follows your mouse cursor">
+                                 ToolTip="{loc:T Nav_MouseLabel_Tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="CursorClick20" FontSize="18" Margin="0,0,10,0"/>
-                            <TextBlock Text="Mouse label" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:T Nav_MouseLabel}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="NavStrip" Style="{StaticResource NavItem}"
-                                 ToolTip="Settings for the colored strip drawn over your taskbar to indicate the active layout">
+                                 ToolTip="{loc:T Nav_TaskbarStrip_Tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="Color20" FontSize="18" Margin="0,0,10,0"/>
-                            <TextBlock Text="Taskbar strip" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:T Nav_TaskbarStrip}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="NavIdle" Style="{StaticResource NavItem}"
-                                 ToolTip="Auto-switch the layout back to a target language when the keyboard has been idle for some time">
+                                 ToolTip="{loc:T Nav_IdleReset_Tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="Timer20" FontSize="18" Margin="0,0,10,0"/>
-                            <TextBlock Text="Idle reset" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:T Nav_IdleReset}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="NavGeneral" Style="{StaticResource NavItem}"
-                                 ToolTip="General application settings">
+                                 ToolTip="{loc:T Nav_General_Tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="Settings20" FontSize="18" Margin="0,0,10,0"/>
-                            <TextBlock Text="General" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:T Nav_General}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>
@@ -214,14 +226,14 @@
                         </Style>
                     </ScrollViewer.Style>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Caret label"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T Caret_Title}"/>
                         <TextBlock Style="{StaticResource SectionSubtitle}"
-                                   Text="A small floating label that follows your text caret and shows the active keyboard layout. Useful while typing in mixed-language documents."/>
+                                   Text="{loc:T Caret_Subtitle}"/>
 
                         <!-- Live preview -->
                         <Border Style="{StaticResource Card}" Background="{DynamicResource PreviewBackground}">
                             <StackPanel>
-                                <TextBlock Text="Live preview"
+                                <TextBlock Text="{loc:T Caret_PreviewLabel}"
                                            FontSize="11" FontWeight="SemiBold"
                                            Foreground="{DynamicResource SubtleText}"
                                            Margin="0,0,0,10"/>
@@ -254,16 +266,16 @@
                                     </Canvas>
                                 </Border>
                                 <TextBlock Style="{StaticResource FieldHint}"
-                                           Text="The label uses the language code from your first configured row, or 'EN' if none exists yet."/>
+                                           Text="{loc:T Caret_PreviewHint}"/>
                             </StackPanel>
                         </Border>
 
                         <!-- Controls -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="Enable the caret label"
+                                <ui:ToggleSwitch Content="{loc:T Caret_Enable}"
                                                  IsChecked="{Binding CaretEnabled}"
-                                                 ToolTip="Master switch for the caret label overlay."/>
+                                                 ToolTip="{loc:T Caret_Enable_Tooltip}"/>
 
                                 <Grid Margin="0,18,0,0" IsEnabled="{Binding CaretEnabled}">
                                     <Grid.ColumnDefinitions>
@@ -278,27 +290,27 @@
                                     </Grid.RowDefinitions>
 
                                     <StackPanel Grid.Row="0" Grid.Column="0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Horizontal offset (px)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_OffsetX}"/>
                                         <ui:NumberBox Value="{Binding CaretOffsetX, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
-                                                      ToolTip="Pixels to shift the label to the right of the caret. Negative values move it to the left."/>
+                                                      ToolTip="{loc:T Caret_OffsetX_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Row="0" Grid.Column="2">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Vertical offset (px)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_OffsetY}"/>
                                         <ui:NumberBox Value="{Binding CaretOffsetY, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
-                                                      ToolTip="Pixels to shift the label downward from the caret. Negative values move it up."/>
+                                                      ToolTip="{loc:T Caret_OffsetY_Tooltip}"/>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Font family"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontFamily}"/>
                                         <ComboBox ItemsSource="{Binding AvailableFonts}"
                                                   Text="{Binding CaretFont, UpdateSourceTrigger=PropertyChanged}"
                                                   IsEditable="True"
-                                                  ToolTip="Font family used to draw the label. Type to search; defaults to a system font if the chosen family is unavailable."/>
+                                                  ToolTip="{loc:T Caret_FontFamily_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Font size (pt)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontSize}"/>
                                         <ui:NumberBox Value="{Binding CaretSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
-                                                      ToolTip="Font size of the label in points. Larger sizes are more visible but more intrusive."/>
+                                                      ToolTip="{loc:T Caret_FontSize_Tooltip}"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -318,14 +330,14 @@
                         </Style>
                     </ScrollViewer.Style>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Mouse label"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T Mouse_Title}"/>
                         <TextBlock Style="{StaticResource SectionSubtitle}"
-                                   Text="A small label that follows your mouse cursor and shows the active keyboard layout. Handy in apps without a visible text caret."/>
+                                   Text="{loc:T Mouse_Subtitle}"/>
 
                         <!-- Live preview -->
                         <Border Style="{StaticResource Card}" Background="{DynamicResource PreviewBackground}">
                             <StackPanel>
-                                <TextBlock Text="Live preview"
+                                <TextBlock Text="{loc:T Mouse_PreviewLabel}"
                                            FontSize="11" FontWeight="SemiBold"
                                            Foreground="{DynamicResource SubtleText}"
                                            Margin="0,0,0,10"/>
@@ -356,9 +368,9 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="Enable the mouse label"
+                                <ui:ToggleSwitch Content="{loc:T Mouse_Enable}"
                                                  IsChecked="{Binding MouseEnabled}"
-                                                 ToolTip="Master switch for the mouse cursor label overlay."/>
+                                                 ToolTip="{loc:T Mouse_Enable_Tooltip}"/>
 
                                 <Grid Margin="0,18,0,0" IsEnabled="{Binding MouseEnabled}">
                                     <Grid.ColumnDefinitions>
@@ -373,36 +385,36 @@
                                     </Grid.RowDefinitions>
 
                                     <StackPanel Grid.Row="0" Grid.Column="0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Horizontal offset (px)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_OffsetX}"/>
                                         <ui:NumberBox Value="{Binding MouseOffsetX, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
-                                                      ToolTip="Pixels to shift the label to the right of the cursor tip. Negative values move it left."/>
+                                                      ToolTip="{loc:T Mouse_OffsetX_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Row="0" Grid.Column="2">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Vertical offset (px)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_OffsetY}"/>
                                         <ui:NumberBox Value="{Binding MouseOffsetY, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
-                                                      ToolTip="Pixels to shift the label downward from the cursor tip. Negative values move it up."/>
+                                                      ToolTip="{loc:T Mouse_OffsetY_Tooltip}"/>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Font family"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontFamily}"/>
                                         <ComboBox ItemsSource="{Binding AvailableFonts}"
                                                   Text="{Binding MouseFont, UpdateSourceTrigger=PropertyChanged}"
                                                   IsEditable="True"
-                                                  ToolTip="Font family used to draw the label."/>
+                                                  ToolTip="{loc:T Mouse_FontFamily_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Font size (pt)"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontSize}"/>
                                         <ui:NumberBox Value="{Binding MouseSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
-                                                      ToolTip="Font size of the label in points."/>
+                                                      ToolTip="{loc:T Mouse_FontSize_Tooltip}"/>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Tracking mode"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_TrackingMode}"/>
                                         <ComboBox ItemsSource="{Binding MouseTrackingModes}"
                                                   SelectedItem="{Binding MouseTrackingMode}"
-                                                  ToolTip="Economy: the label only updates while the mouse moves; idle when at rest. Max-smoothness: marginally snappier first-frame response at higher background CPU/battery cost."/>
+                                                  ToolTip="{loc:T Mouse_TrackingMode_Tooltip}"/>
                                         <TextBlock Style="{StaticResource FieldHint}"
-                                                   Text="Economy is recommended for laptops. Max-smoothness shaves a few milliseconds at the cost of constant background polling."/>
+                                                   Text="{loc:T Mouse_TrackingMode_Hint}"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -422,14 +434,14 @@
                         </Style>
                     </ScrollViewer.Style>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Taskbar color strip"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T Strip_Title}"/>
                         <TextBlock Style="{StaticResource SectionSubtitle}"
-                                   Text="A colored strip drawn over your taskbar, in the color you assigned to the active language. Glanceable from across the screen."/>
+                                   Text="{loc:T Strip_Subtitle}"/>
 
                         <!-- Live preview -->
                         <Border Style="{StaticResource Card}" Background="{DynamicResource PreviewBackground}">
                             <StackPanel>
-                                <TextBlock Text="Live preview"
+                                <TextBlock Text="{loc:T Strip_PreviewLabel}"
                                            FontSize="11" FontWeight="SemiBold"
                                            Foreground="{DynamicResource SubtleText}"
                                            Margin="0,0,0,10"/>
@@ -479,15 +491,15 @@
                                     </Grid>
                                 </Border>
                                 <TextBlock Style="{StaticResource FieldHint}"
-                                           Text="Preview uses the first configured color row. Add languages below to see the strip switch colors when the layout changes."/>
+                                           Text="{loc:T Strip_PreviewHint}"/>
                             </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="Enable the taskbar strip"
+                                <ui:ToggleSwitch Content="{loc:T Strip_Enable}"
                                                  IsChecked="{Binding StripEnabled}"
-                                                 ToolTip="Master switch for the taskbar color-strip overlay."/>
+                                                 ToolTip="{loc:T Strip_Enable_Tooltip}"/>
 
                                 <Grid Margin="0,18,0,0" IsEnabled="{Binding StripEnabled}">
                                     <Grid.ColumnDefinitions>
@@ -504,35 +516,35 @@
                                     </Grid.RowDefinitions>
 
                                     <StackPanel Grid.Row="0" Grid.Column="0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Thickness"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Strip_Thickness}"/>
                                         <ComboBox ItemsSource="{Binding StripThicknesses}"
                                                   SelectedItem="{Binding StripThickness}"
-                                                  ToolTip="How tall the strip is. 'Full' covers the entire taskbar height and disables the vertical position option."/>
+                                                  ToolTip="{loc:T Strip_Thickness_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Row="0" Grid.Column="2">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Vertical position"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Strip_VerticalPosition}"/>
                                         <ComboBox ItemsSource="{Binding StripVerticalPositions}"
                                                   SelectedItem="{Binding StripVerticalPosition}"
                                                   IsEnabled="{Binding StripVerticalPositionEnabled}"
-                                                  ToolTip="Whether the strip sits at the top or bottom of the taskbar. Disabled when thickness is 'full'."/>
+                                                  ToolTip="{loc:T Strip_VerticalPosition_Tooltip}"/>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Z-order placement"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Strip_ZOrder}"/>
                                         <ComboBox ItemsSource="{Binding StripPlacements}"
                                                   SelectedItem="{Binding StripPlacement}"
-                                                  ToolTip="'Front': strip is drawn over taskbar icons (best visibility). 'Behind': strip is drawn under icons (subtler, but harder to see when icons overlap)."/>
+                                                  ToolTip="{loc:T Strip_ZOrder_Tooltip}"/>
                                     </StackPanel>
 
                                     <ui:ToggleSwitch Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
                                                      Margin="0,18,0,0"
-                                                     Content="Apply transparency"
+                                                     Content="{loc:T Strip_ApplyTransparency}"
                                                      IsChecked="{Binding StripOpacityEnabled}"
-                                                     ToolTip="When on, the strip is drawn with the opacity below. When off, it is fully opaque."/>
+                                                     ToolTip="{loc:T Strip_ApplyTransparency_Tooltip}"/>
 
                                     <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,12,0,0"
                                                 IsEnabled="{Binding StripOpacityEnabled}">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Opacity"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Strip_Opacity}"/>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -544,7 +556,7 @@
                                                     TickFrequency="0.1" IsSnapToTickEnabled="False"
                                                     Value="{Binding StripOpacity}"
                                                     VerticalAlignment="Center"
-                                                    ToolTip="0% is fully transparent, 100% is fully opaque."/>
+                                                    ToolTip="{loc:T Strip_Opacity_Tooltip}"/>
                                             <TextBlock Grid.Column="1"
                                                        Margin="10,0,0,0"
                                                        VerticalAlignment="Center"
@@ -560,11 +572,11 @@
                         <!-- Color table -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel IsEnabled="{Binding StripEnabled}">
-                                <TextBlock Text="Language colors"
+                                <TextBlock Text="{loc:T Strip_ColorTableTitle}"
                                            FontWeight="SemiBold" FontSize="14"
                                            Margin="0,0,0,4"/>
                                 <TextBlock Style="{StaticResource FieldHint}"
-                                           Text="Map each installed keyboard layout to a hex color (e.g. #FF0000). The strip shows the color for the currently active layout."/>
+                                           Text="{loc:T Strip_ColorTableHint}"/>
 
                                 <DataGrid ItemsSource="{Binding ColorRows}"
                                           AutoGenerateColumns="False"
@@ -580,9 +592,9 @@
                                           Height="180"
                                           Margin="0,12,0,0">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Language code" Binding="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
-                                        <DataGridTextColumn Header="Hex color" Binding="{Binding Color, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                                        <DataGridTemplateColumn Header="Swatch" Width="80">
+                                        <DataGridTextColumn Header="{loc:T Strip_Column_Code}" Binding="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
+                                        <DataGridTextColumn Header="{loc:T Strip_Column_Color}" Binding="{Binding Color, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                        <DataGridTemplateColumn Header="{loc:T Strip_Column_Swatch}" Width="80">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <Border CornerRadius="4" Width="48" Height="20"
@@ -599,7 +611,7 @@
                                                     <ui:Button Appearance="Secondary"
                                                                Padding="6,2"
                                                                Margin="0,2"
-                                                               ToolTip="Remove this row"
+                                                               ToolTip="{loc:T Strip_Remove_Tooltip}"
                                                                Command="{Binding DataContext.RemoveColorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                CommandParameter="{Binding}">
                                                         <ui:SymbolIcon Symbol="Delete20"/>
@@ -614,10 +626,10 @@
                                            Margin="0,10,0,0"
                                            HorizontalAlignment="Left"
                                            Command="{Binding AddColorCommand}"
-                                           ToolTip="Add a new language → color mapping">
+                                           ToolTip="{loc:T Strip_AddLanguage_Tooltip}">
                                     <StackPanel Orientation="Horizontal">
                                         <ui:SymbolIcon Symbol="Add20" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Add language"/>
+                                        <TextBlock Text="{loc:T Strip_AddLanguage}"/>
                                     </StackPanel>
                                 </ui:Button>
                             </StackPanel>
@@ -637,13 +649,13 @@
                         </Style>
                     </ScrollViewer.Style>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Idle reset"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T Idle_Title}"/>
                         <TextBlock Style="{StaticResource SectionSubtitle}"
-                                   Text="Automatically switch the keyboard layout to a chosen target when the keyboard has been idle for a while. Prevents typing in the wrong layout after walking away."/>
+                                   Text="{loc:T Idle_Subtitle}"/>
 
                         <Border Style="{StaticResource Card}" Background="{DynamicResource PreviewBackground}">
                             <StackPanel>
-                                <TextBlock Text="Live preview"
+                                <TextBlock Text="{loc:T Idle_PreviewLabel}"
                                            FontSize="11" FontWeight="SemiBold"
                                            Foreground="{DynamicResource SubtleText}"
                                            Margin="0,0,0,10"/>
@@ -658,18 +670,18 @@
                                         </Border>
                                         <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="After " VerticalAlignment="Center" FontSize="14"/>
+                                                <TextBlock Text="{loc:T Idle_PreviewAfter}" VerticalAlignment="Center" FontSize="14"/>
                                                 <TextBlock Text="{Binding IdleSeconds}" FontWeight="SemiBold" FontSize="14" Foreground="#FF2563EB" VerticalAlignment="Center"/>
-                                                <TextBlock Text=" seconds idle " VerticalAlignment="Center" FontSize="14"/>
+                                                <TextBlock Text="{loc:T Idle_PreviewSecondsIdle}" VerticalAlignment="Center" FontSize="14"/>
                                                 <ui:SymbolIcon Symbol="ArrowRight20" Margin="6,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="switch to " VerticalAlignment="Center" FontSize="14"/>
+                                                <TextBlock Text="{loc:T Idle_PreviewSwitchTo}" VerticalAlignment="Center" FontSize="14"/>
                                                 <Border Background="#FF1F2937" CornerRadius="4" Padding="6,2" Margin="4,0,0,0">
                                                     <TextBlock Text="{Binding IdleTarget}" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Style="{StaticResource FieldHint}"
                                                        Margin="0,6,0,0"
-                                                       Text="Triggered only when the keyboard is idle — mouse movement does not reset the timer."/>
+                                                       Text="{loc:T Idle_PreviewHint}"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
@@ -678,9 +690,9 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="Enable idle reset"
+                                <ui:ToggleSwitch Content="{loc:T Idle_Enable}"
                                                  IsChecked="{Binding IdleEnabled}"
-                                                 ToolTip="Master switch for automatically resetting the layout after idle time."/>
+                                                 ToolTip="{loc:T Idle_Enable_Tooltip}"/>
 
                                 <Grid Margin="0,18,0,0" IsEnabled="{Binding IdleEnabled}">
                                     <Grid.ColumnDefinitions>
@@ -689,16 +701,16 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Idle seconds"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Idle_Seconds}"/>
                                         <ui:NumberBox Value="{Binding IdleSeconds, UpdateSourceTrigger=PropertyChanged}" Minimum="5" Maximum="3600" SmallChange="5" LargeChange="30"
-                                                      ToolTip="How long the keyboard must be idle before resetting. Minimum 5 seconds."/>
+                                                      ToolTip="{loc:T Idle_Seconds_Tooltip}"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Target language"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Idle_Target}"/>
                                         <ComboBox ItemsSource="{Binding AvailableCodes}"
                                                   Text="{Binding IdleTarget, UpdateSourceTrigger=PropertyChanged}"
                                                   IsEditable="True"
-                                                  ToolTip="Two-letter language code the layout will reset to (e.g. 'en', 'he', 'ru')."/>
+                                                  ToolTip="{loc:T Idle_Target_Tooltip}"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -718,17 +730,40 @@
                         </Style>
                     </ScrollViewer.Style>
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="General"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T General_Title}"/>
                         <TextBlock Style="{StaticResource SectionSubtitle}"
-                                   Text="Application-wide options."/>
+                                   Text="{loc:T General_Subtitle}"/>
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="Launch on Windows startup"
+                                <ui:ToggleSwitch Content="{loc:T General_LaunchOnStartup}"
                                                  IsChecked="{Binding Autostart}"
-                                                 ToolTip="Adds OopsType to the Windows Run registry so it starts in the background when you sign in."/>
+                                                 ToolTip="{loc:T General_LaunchOnStartup_Tooltip}"/>
                                 <TextBlock Style="{StaticResource FieldHint}"
-                                           Text="OopsType runs in the system tray. Right-click the tray icon to open this window or quit."/>
+                                           Text="{loc:T General_TrayHint}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Language picker: ItemsSource is populated dynamically from JSON files
+                             discovered under Languages\, so adding a new file ⇒ new combo entry. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T General_Language}"/>
+                                <ComboBox ItemsSource="{Binding AvailableLanguages}"
+                                          SelectedItem="{Binding SelectedLanguage}"
+                                          ToolTip="{loc:T General_Language_Tooltip}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding NativeName}" FontWeight="SemiBold"/>
+                                                <TextBlock Text=" — " Opacity="0.6"/>
+                                                <TextBlock Text="{Binding Name}" Opacity="0.8"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource FieldHint}"
+                                           Text="{loc:T General_Language_Hint}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -759,10 +794,10 @@
                     <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource SubtleText}" FontSize="12">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="All changes saved"/>
+                                <Setter Property="Text" Value="{loc:T Footer_AllSaved}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsDirty}" Value="True">
-                                        <Setter Property="Text" Value="Unsaved changes"/>
+                                        <Setter Property="Text" Value="{loc:T Footer_Unsaved}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -774,10 +809,10 @@
                            MinWidth="120"
                            Command="{Binding SaveCommand}"
                            IsDefault="True"
-                           ToolTip="Persist current settings to disk and apply them to the running overlays.">
+                           ToolTip="{loc:T Footer_Save_Tooltip}">
                     <StackPanel Orientation="Horizontal">
                         <ui:SymbolIcon Symbol="Save20" Margin="0,0,6,0"/>
-                        <TextBlock Text="Save"/>
+                        <TextBlock Text="{loc:T Footer_Save}"/>
                     </StackPanel>
                 </ui:Button>
             </Grid>

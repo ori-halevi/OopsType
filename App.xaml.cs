@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using OopsType.Infrastructure;
 using OopsType.Services;
+using OopsType.Services.Localization;
 using OopsType.Services.Overlays;
 using OopsType.ViewModels;
 using OopsType.Views;
@@ -34,6 +35,7 @@ public partial class App
         // ---- Domain / infrastructure services (singletons — global state) ----
         c.RegisterSingleton<ITransparencyDetector, TransparencyDetector>();
         c.RegisterSingleton<ISettingsService, SettingsService>();
+        c.RegisterSingleton<ILocalizationService, LocalizationService>();
         c.RegisterSingleton<IKeyboardLayoutService, KeyboardLayoutService>();
         c.RegisterSingleton<ICaretLocationService, CaretLocationService>();
         c.RegisterSingleton<IKeyboardActivityService, KeyboardActivityService>();
@@ -87,6 +89,14 @@ public partial class App
 
         try
         {
+            // Apply the user's saved language BEFORE any window opens so the first SettingsWindow
+            // (which can pop up on first-run) renders in the right language with the correct
+            // FlowDirection. The service has already discovered packs in its constructor;
+            // SetLanguage just selects which one to publish into Application.Resources.
+            var loc = Container.Resolve<ILocalizationService>();
+            var settings = Container.Resolve<ISettingsService>();
+            loc.SetLanguage(settings.Current.General.Language);
+
             _lifecycle = Container.Resolve<IApplicationLifecycle>();
             _lifecycle.Start();
         }

@@ -38,6 +38,11 @@ A colored bar painted over (or behind) your taskbar in the color you assigned to
 ### 4. Idle reset
 Optional auto-revert: after N seconds without keypresses, switch the focused window's layout to a target language (e.g. always back to English when you walk away). One-shot per idle stretch — it won't fight you while you continue to idle. Mouse movement doesn't reset the timer; only real keystrokes do.
 
+### 5. Multi-language UI
+The settings window and tray menu are translatable via plain JSON files. Pick a language from **General → Application language**; switching applies live, including right-to-left layout flip for RTL languages.
+
+Adding a new language is a no-code, no-rebuild operation — see [Adding a translation](#adding-a-translation) below.
+
 ---
 
 ## Installing
@@ -82,6 +87,43 @@ The settings window has a live preview for every overlay, so you can dial in off
 
 ---
 
+## Adding a translation
+
+OopsType discovers language packs at startup from two folders. Drop a JSON file in either one and it shows up in **General → Application language** the next time you launch.
+
+### Discovery folders
+1. `<OopsType.exe folder>\Languages\` — packs that ship with the install.
+2. `%LOCALAPPDATA%\OopsType\Languages\` — your own packs. Useful when OopsType is installed in a read-only location (e.g. Program Files), or when you want to override a built-in pack. Duplicates here win.
+
+### File format
+Each file is a single JSON document. Filename is cosmetic (any name works); the `code` field is the identifier that's persisted to `settings.json`.
+
+```json
+{
+  "code": "fr",
+  "name": "French",
+  "nativeName": "Français",
+  "flowDirection": "LeftToRight",
+  "strings": {
+    "Window_Title": "OopsType — Paramètres",
+    "Nav_CaretLabel": "Étiquette du curseur",
+    "...": "..."
+  }
+}
+```
+
+- `code` — short identifier (ISO-style, lowercase). What gets saved in settings.
+- `name` — neutral display name shown in the chooser.
+- `nativeName` — name in the language's own script. Shown in the chooser as the primary label.
+- `flowDirection` — `"LeftToRight"` (default) or `"RightToLeft"`. Drives the settings window's text direction.
+- `strings` — translation table. Use `Languages\en.json` as the canonical key list.
+
+### Fallback behavior
+- Any key missing from your pack falls back to the English value automatically — partial translations are valid, you don't need to translate every key on day one.
+- If a key is missing from English too (e.g. a custom pack with a typo'd key), the raw key name is shown so it's obvious in the UI rather than silently blank.
+
+---
+
 ## Architecture
 
 OopsType is organized as a small, dependency-injected WPF app (Prism.Unity container). Each concern lives in its own class so behavior can be reasoned about — and toggled — in isolation.
@@ -100,6 +142,9 @@ Services/
 ├── StartupService               ── HKCU\…\Run autostart toggle
 ├── TransparencyDetector         ── reads Win11 acrylic preference for first-run defaults
 ├── LocaleResolver               ── HKL → native-script label (en→"EN", he→"עב", ja→"日本")
+├── Localization/
+│   └── LocalizationService      ── discovers Languages\*.json, swaps the active ResourceDictionary,
+│                                   raises LanguageChanged for WinForms-side consumers (tray menu)
 └── Overlays/
     ├── CaretOverlayPresenter         ── owns + positions caret chip; 120 ms follow loop
     ├── MouseOverlayPresenter         ── hook-wakes-Rendering pattern (see file header)

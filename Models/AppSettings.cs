@@ -77,4 +77,11 @@ public sealed class IdleResetSettings
 public sealed class GeneralSettings
 {
     public bool Autostart { get; set; } = true;
+
+    /// <summary>
+    /// Code of the language pack used by the settings window and tray menu (e.g. "en", "he").
+    /// Empty means "use default" — LocalizationService resolves it against whatever packs it
+    /// discovered, falling back to English if none match.
+    /// </summary>
+    public string Language { get; set; } = "";
 }
