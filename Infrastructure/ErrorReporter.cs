@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace OopsType.Infrastructure;
 
@@ -7,6 +8,10 @@ namespace OopsType.Infrastructure;
 /// Default <see cref="IErrorReporter"/>. Always logs; throttles user-facing notifications to at
 /// most one per <see cref="ThrottleWindow"/> per source, so a per-frame failure (e.g. a broken
 /// caret query firing 8×/sec) can't carpet-bomb the user with tray balloons.
+///
+/// <para>Throttle uses <see cref="Stopwatch"/> (monotonic) instead of <see cref="DateTime.UtcNow"/>:
+/// an NTP correction, manual clock change, or DST flip won't suppress notifications until the
+/// wall clock catches up to a "future" timestamp we wrote earlier.</para>
 /// </summary>
 public sealed class ErrorReporter : IErrorReporter
 {
@@ -16,7 +21,7 @@ public sealed class ErrorReporter : IErrorReporter
 
     private readonly ILogger _logger;
     private readonly object _gate = new();
-    private readonly Dictionary<string, DateTime> _lastNotifyUtc =
+    private readonly Dictionary<string, long> _lastNotifyTicks =
         new(StringComparer.OrdinalIgnoreCase);
 
     public event Action<ErrorNotification>? Notified;
@@ -40,14 +45,15 @@ public sealed class ErrorReporter : IErrorReporter
         bool shouldFire;
         lock (_gate)
         {
-            var now = DateTime.UtcNow;
-            if (_lastNotifyUtc.TryGetValue(source, out var last) && now - last < ThrottleWindow)
+            var now = Stopwatch.GetTimestamp();
+            if (_lastNotifyTicks.TryGetValue(source, out var last)
+                && Stopwatch.GetElapsedTime(last) < ThrottleWindow)
             {
                 shouldFire = false;
             }
             else
             {
-                _lastNotifyUtc[source] = now;
+                _lastNotifyTicks[source] = now;
                 shouldFire = true;
             }
         }

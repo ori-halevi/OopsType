@@ -60,8 +60,10 @@ public sealed class IdleResetService : IIdleResetService
         var cfg = _settings.Current.IdleReset;
         if (!cfg.Enabled || _alreadyReset) return;
 
-        var idleSeconds = (DateTime.UtcNow - _activity.LastKeyTimeUtc).TotalSeconds;
-        if (idleSeconds < cfg.IdleSeconds) return;
+        // TimeSinceLastKey is a monotonic Stopwatch delta — wall-clock jumps (NTP, DST, manual
+        // time change) can't trip us into an unwanted reset, and can't suppress a real one
+        // forever the way DateTime-based math would.
+        if (_activity.TimeSinceLastKey.TotalSeconds < cfg.IdleSeconds) return;
 
         // Already in the target language: nothing to do, but latch so we don't re-check on the
         // next tick (cheap, but tidier).

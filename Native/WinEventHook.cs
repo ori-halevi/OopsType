@@ -9,6 +9,8 @@ internal sealed class WinEventHook : IDisposable
 {
     private readonly NativeMethods.WinEventDelegate _delegate;
     private readonly IErrorReporter _reporter;
+    private readonly uint _eventMin;
+    private readonly uint _eventMax;
     private IntPtr _hook;
 
     public event Action<uint, IntPtr>? EventRaised;
@@ -16,28 +18,46 @@ internal sealed class WinEventHook : IDisposable
     public WinEventHook(uint eventMin, uint eventMax, IErrorReporter reporter)
     {
         _reporter = reporter;
+        _eventMin = eventMin;
+        _eventMax = eventMax;
         _delegate = OnWinEvent;
+        _hook = InstallHook();
+    }
 
+    /// <summary>True when SetWinEventHook succeeded. False means focus-change tracking is disabled.</summary>
+    public bool IsInstalled => _hook != IntPtr.Zero;
+
+    /// <summary>
+    /// Re-installs the WinEvent hook if not currently active. Recovers from initial install
+    /// failure (e.g., transient session-setup race) or — rarer than LL hooks but still possible —
+    /// the system having torn the hook down across a session lock/RDP transition.
+    /// </summary>
+    public void EnsureInstalled()
+    {
+        if (_hook != IntPtr.Zero) return;
+        _hook = InstallHook();
+    }
+
+    private IntPtr InstallHook()
+    {
         try
         {
-            _hook = NativeMethods.SetWinEventHook(eventMin, eventMax, IntPtr.Zero, _delegate,
+            var hook = NativeMethods.SetWinEventHook(_eventMin, _eventMax, IntPtr.Zero, _delegate,
                 0, 0, NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
-            if (_hook == IntPtr.Zero)
+            if (hook == IntPtr.Zero)
             {
                 var err = Marshal.GetLastWin32Error();
                 _reporter.Report("WinEventHook.Install",
                     new Win32Exception(err, $"SetWinEventHook failed (Win32 error {err})"));
             }
+            return hook;
         }
         catch (Exception ex)
         {
             _reporter.Report("WinEventHook.Install", ex);
-            _hook = IntPtr.Zero;
+            return IntPtr.Zero;
         }
     }
-
-    /// <summary>True when SetWinEventHook succeeded. False means focus-change tracking is disabled.</summary>
-    public bool IsInstalled => _hook != IntPtr.Zero;
 
     private void OnWinEvent(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
         int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)

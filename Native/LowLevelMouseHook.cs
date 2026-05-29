@@ -12,6 +12,9 @@ namespace OopsType.Native;
 /// fine); the callback runs on that same thread. Keep the callback trivial — Windows enforces
 /// LowLevelHooksTimeout (~300ms by default) and will silently unhook a slow callback, also
 /// degrading mouse responsiveness system-wide while it waits.
+///
+/// <para><see cref="EnsureInstalled"/> recovers from initial install failure or silent OS-side
+/// unhook. See the keyboard hook for the broader rationale.</para>
 /// </summary>
 internal sealed class LowLevelMouseHook : IDisposable
 {
@@ -30,6 +33,16 @@ internal sealed class LowLevelMouseHook : IDisposable
 
     /// <summary>True when SetWindowsHookEx succeeded. False means we silently degrade (no mouse events).</summary>
     public bool IsInstalled => _hook != IntPtr.Zero;
+
+    /// <summary>
+    /// Re-installs the hook if it isn't currently active. No-op when the handle is valid.
+    /// Safe to call from a watchdog tick; never throws.
+    /// </summary>
+    public void EnsureInstalled()
+    {
+        if (_hook != IntPtr.Zero) return;
+        _hook = InstallHook();
+    }
 
     private IntPtr InstallHook()
     {

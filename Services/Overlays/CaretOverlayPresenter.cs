@@ -32,6 +32,9 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     private CaretLabelViewModel? _viewModel;
     private DispatcherTimer? _followTimer;
 
+    // Coalesces a burst of keypresses into a single deferred UpdatePosition — see OnKeyPressed.
+    private bool _keyUpdateQueued;
+
     public CaretOverlayPresenter(
         ISettingsService settings,
         ICaretLocationService caret,
@@ -48,8 +51,6 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _viewFactory = viewFactory;
 
         // Re-position immediately on every keypress so the chip "snaps" to the caret as you type.
-        // Wrapped — this handler runs on the LL hook callback thread (via KeyboardActivityService);
-        // we MUST NOT throw back into the hook chain.
         _activity.KeyPressed += OnKeyPressed;
     }
 
@@ -66,8 +67,29 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _overlay?.EnsureTopmost();
     }
 
-    private void OnKeyPressed() =>
-        Safe.Invoke(_reporter, "CaretOverlayPresenter.OnKeyPressed", UpdatePosition);
+    /// <summary>
+    /// KeyPressed fires synchronously from inside the LL keyboard hook callback. UpdatePosition
+    /// calls into UI Automation (cross-process COM) which can block for seconds when a target
+    /// app is unresponsive. If we ran it on the hook thread, blowing the LowLevelHooksTimeout
+    /// (~300ms) would cause Windows to silently unhook us — killing all keyboard tracking
+    /// permanently with no recovery. We defer the work to the dispatcher so the hook callback
+    /// returns to the OS in microseconds, and coalesce concurrent posts so a fast typist doesn't
+    /// flood the queue.
+    /// </summary>
+    private void OnKeyPressed()
+    {
+        if (_overlay == null || _keyUpdateQueued) return;
+
+        var dispatcher = _overlay.Dispatcher ?? Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        _keyUpdateQueued = true;
+        dispatcher.BeginInvoke(new Action(() =>
+        {
+            _keyUpdateQueued = false;
+            Safe.Invoke(_reporter, "CaretOverlayPresenter.OnKeyPressed", UpdatePosition);
+        }), DispatcherPriority.Background);
+    }
 
     private void EnsureCreated()
     {

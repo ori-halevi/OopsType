@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Input;
 using System.Windows.Media;
+using OopsType.Infrastructure;
 using OopsType.Models;
 using OopsType.Models.Localization;
 using OopsType.Services;
@@ -21,14 +22,16 @@ public sealed class SettingsViewModel : BindableBase
     private readonly IKeyboardLayoutService _layout;
     private readonly IStartupService _startup;
     private readonly ILocalizationService _localization;
+    private readonly IErrorReporter _reporter;
     private readonly bool _initialized;
 
-    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup, ILocalizationService localization)
+    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup, ILocalizationService localization, IErrorReporter reporter)
     {
         _settings = settings;
         _layout = layout;
         _startup = startup;
         _localization = localization;
+        _reporter = reporter;
 
         AvailableLanguages = new ObservableCollection<LanguagePack>(_localization.AvailableLanguages);
         // Pre-select the saved language pack object, not just its code, so the ComboBox can
@@ -83,30 +86,43 @@ public sealed class SettingsViewModel : BindableBase
         .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    // Clamp window for label offsets. Even on a 16K wide multi-monitor setup the largest
+    // sensible offset is a few thousand pixels — anything past this is almost certainly a
+    // fat-fingered value (or a malformed settings.json) and would push the label off every
+    // screen, making the overlay look broken with no obvious cause. ±10_000 also keeps
+    // `cursor + offset` away from int overflow even if the cursor itself is at int.MaxValue,
+    // which a misbehaving virtual-display driver can theoretically report.
+    private const int MaxOffsetPx = 10_000;
+    private const int MinFontSize = 6;
+    private const int MaxFontSize = 96;
+
     // ---- Caret label (follows text caret) ----
     private bool _caretEnabled;
     public bool CaretEnabled { get => _caretEnabled; set => SetProperty(ref _caretEnabled, value); }
 
     private int _caretOffsetX;
-    public int CaretOffsetX { get => _caretOffsetX; set => SetProperty(ref _caretOffsetX, value); }
+    public int CaretOffsetX { get => _caretOffsetX; set => SetProperty(ref _caretOffsetX, ClampOffset(value)); }
     private int _caretOffsetY;
-    public int CaretOffsetY { get => _caretOffsetY; set => SetProperty(ref _caretOffsetY, value); }
+    public int CaretOffsetY { get => _caretOffsetY; set => SetProperty(ref _caretOffsetY, ClampOffset(value)); }
     private string _caretFont;
     public string CaretFont { get => _caretFont; set => SetProperty(ref _caretFont, value); }
     private int _caretSize;
-    public int CaretSize { get => _caretSize; set => SetProperty(ref _caretSize, value); }
+    public int CaretSize { get => _caretSize; set => SetProperty(ref _caretSize, ClampFontSize(value)); }
 
     // ---- Mouse label (follows mouse cursor) ----
     private bool _mouseEnabled;
     public bool MouseEnabled { get => _mouseEnabled; set => SetProperty(ref _mouseEnabled, value); }
     private int _mouseOffsetX;
-    public int MouseOffsetX { get => _mouseOffsetX; set => SetProperty(ref _mouseOffsetX, value); }
+    public int MouseOffsetX { get => _mouseOffsetX; set => SetProperty(ref _mouseOffsetX, ClampOffset(value)); }
     private int _mouseOffsetY;
-    public int MouseOffsetY { get => _mouseOffsetY; set => SetProperty(ref _mouseOffsetY, value); }
+    public int MouseOffsetY { get => _mouseOffsetY; set => SetProperty(ref _mouseOffsetY, ClampOffset(value)); }
     private string _mouseFont;
     public string MouseFont { get => _mouseFont; set => SetProperty(ref _mouseFont, value); }
     private int _mouseSize;
-    public int MouseSize { get => _mouseSize; set => SetProperty(ref _mouseSize, value); }
+    public int MouseSize { get => _mouseSize; set => SetProperty(ref _mouseSize, ClampFontSize(value)); }
+
+    private static int ClampOffset(int value) => Math.Clamp(value, -MaxOffsetPx, MaxOffsetPx);
+    private static int ClampFontSize(int value) => value <= 0 ? value : Math.Clamp(value, MinFontSize, MaxFontSize);
 
     public string[] MouseTrackingModes { get; } = new[] { "economy", "max-smoothness" };
     private string _mouseTrackingMode;
@@ -220,7 +236,9 @@ public sealed class SettingsViewModel : BindableBase
     private bool _idleEnabled;
     public bool IdleEnabled { get => _idleEnabled; set => SetProperty(ref _idleEnabled, value); }
     private int _idleSeconds;
-    public int IdleSeconds { get => _idleSeconds; set => SetProperty(ref _idleSeconds, value); }
+    // Floor at 5s (same lower bound used in Apply()) and cap at a week — beyond that the user
+    // has effectively disabled the feature, so it might as well be expressed via IdleEnabled.
+    public int IdleSeconds { get => _idleSeconds; set => SetProperty(ref _idleSeconds, Math.Clamp(value, 5, 7 * 24 * 60 * 60)); }
     private string _idleTarget;
     public string IdleTarget { get => _idleTarget; set => SetProperty(ref _idleTarget, value); }
 
@@ -317,8 +335,23 @@ public sealed class SettingsViewModel : BindableBase
     public ICommand AddColorCommand { get; }
     public ICommand RemoveColorCommand { get; }
 
-    /// <summary>Projects VM state into settings and persists. Does NOT close the window.</summary>
+    /// <summary>
+    /// Projects VM state into settings and persists. Does NOT close the window.
+    /// Any persistence error is routed through <see cref="IErrorReporter"/> so the caller (the
+    /// Closing dialog handler) sees <see cref="IsDirty"/> still set and can keep the window open
+    /// instead of vanishing the user's edits.
+    /// </summary>
     public void Apply()
+    {
+        try { ApplyCore(); }
+        catch (Exception ex)
+        {
+            _reporter.Report("SettingsViewModel.Apply", ex);
+            // Leave IsDirty as-is so the OnClosing handler in SettingsWindow re-prompts/stays open.
+        }
+    }
+
+    private void ApplyCore()
     {
         var s = _settings.Current;
         s.CaretLabel.Enabled = CaretEnabled;

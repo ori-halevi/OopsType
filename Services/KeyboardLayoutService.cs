@@ -106,6 +106,15 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
         }
     }
 
+    public void EnsureInstalled()
+    {
+        // Re-arm the focus hook if the OS dropped it (session lock, RDP reconnect, resume from
+        // sleep). The poll timer keeps running regardless, but losing the focus signal means
+        // layout flips that don't change foreground would take up to PollInterval to notice.
+        _focusHook?.EnsureInstalled();
+        Safe.Invoke(_reporter, "KeyboardLayoutService.EnsureInstalled", CheckLayout);
+    }
+
     public void Dispose()
     {
         _pollTimer.Stop();

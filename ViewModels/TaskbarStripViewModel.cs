@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Media;
+using OopsType.Infrastructure;
 using OopsType.Models;
 using OopsType.Services;
 using Prism.Mvvm;
@@ -19,14 +20,16 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
 
     private readonly ISettingsService _settings;
     private readonly IKeyboardLayoutService _layout;
+    private readonly IErrorReporter _reporter;
 
     private Brush _color = FallbackBrush;
     public Brush Color { get => _color; private set => SetProperty(ref _color, value); }
 
-    public TaskbarStripViewModel(ISettingsService settings, IKeyboardLayoutService layout)
+    public TaskbarStripViewModel(ISettingsService settings, IKeyboardLayoutService layout, IErrorReporter reporter)
     {
         _settings = settings;
         _layout = layout;
+        _reporter = reporter;
 
         _settings.Changed += OnSettingsChanged;
         _layout.LanguageChanged += OnLanguageChanged;
@@ -52,7 +55,7 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
     // language without waiting for the next layout change.
     private void OnSettingsChanged() => OnLanguageChanged(_layout.Current);
 
-    private static bool TryParseHex(string hex, out Brush brush)
+    private bool TryParseHex(string hex, out Brush brush)
     {
         brush = FallbackBrush;
         try
@@ -61,8 +64,14 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
             brush = MakeFrozen(c);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            // Surface malformed user input (or a hand-edited settings.json with a typo). The
+            // reporter throttles per source so a stuck bad value can't flood the log — what we
+            // gain is a single breadcrumb the user can grep for instead of silently rendering
+            // gray and wondering why their color isn't taking effect.
+            _reporter.Report("TaskbarStripViewModel.TryParseHex",
+                new FormatException($"Invalid color '{hex}': {ex.Message}", ex));
             return false;
         }
     }

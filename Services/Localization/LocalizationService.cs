@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using OopsType.Infrastructure;
@@ -125,8 +124,13 @@ public sealed class LocalizationService : ILocalizationService
     private IEnumerable<string> GetSearchDirectories()
     {
         // Built-in packs alongside the .exe (shipped via the csproj Content rule).
+        // Use AppContext.BaseDirectory rather than Assembly.GetEntryAssembly().Location:
+        // under single-file publishing (PublishSingleFile=true) the entry assembly has no
+        // on-disk location and Location returns "", which would leave the Languages folder
+        // unsearched and the whole UI blank. BaseDirectory resolves correctly in both the
+        // single-file and normal-build cases.
         string? exeDir = null;
-        try { exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location); }
+        try { exeDir = AppContext.BaseDirectory; }
         catch (Exception ex) { _reporter.Report("LocalizationService.ExeDir", ex); }
 
         if (!string.IsNullOrEmpty(exeDir))
@@ -185,12 +189,16 @@ public sealed class LocalizationService : ILocalizationService
 
         // Remove the previous translations dictionary (if any) before adding the new one — keeps
         // the merged-dictionary list short and prevents stale keys from a previous language
-        // shadowing a delete in the new pack.
+        // shadowing a delete in the new pack. We null out the reference unconditionally: if Remove
+        // throws (rare, but it has been observed when WPF's dictionary list is in an inconsistent
+        // state mid-shutdown), retaining the field would mean we never even try to drop it again
+        // and the merged-dictionary list grows by one entry per language switch, slowing every
+        // {DynamicResource} resolution forever.
         if (_activeDictionary != null)
         {
             try { app.Resources.MergedDictionaries.Remove(_activeDictionary); }
             catch (Exception ex) { _reporter.Report("LocalizationService.RemoveOldDict", ex); }
-            _activeDictionary = null;
+            finally { _activeDictionary = null; }
         }
 
         var dict = new ResourceDictionary();

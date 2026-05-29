@@ -70,7 +70,18 @@ public partial class SettingsWindow : Wpf.Ui.Controls.FluentWindow
         switch (result)
         {
             case Wpf.Ui.Controls.MessageBoxResult.Primary: // Save
-                _vm.Apply();
+                // If persistence fails (disk full, locked file), don't close on top of an unsaved
+                // VM — that would silently lose the user's edits. Keep the window open and let
+                // them retry or discard explicitly.
+                try { _vm.Apply(); }
+                catch
+                {
+                    // _vm.Apply already routes failures through IErrorReporter; the toast will
+                    // appear. Stay open so the user can react instead of seeing their changes
+                    // vanish.
+                    return;
+                }
+                if (_vm.IsDirty) return;
                 break;
             case Wpf.Ui.Controls.MessageBoxResult.Secondary: // Discard
                 break;

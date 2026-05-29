@@ -31,6 +31,14 @@ public sealed class TrayPresenter : ITrayPresenter
     private readonly List<Action> _retranslateActions = new();
 
     private WinForms.NotifyIcon? _icon;
+    // Tracked separately so Dispose can release the GDI/native handles each of these owns —
+    // NotifyIcon.Dispose does NOT cascade to its Icon, ContextMenuStrip, or the Font we attached.
+    // For 24/7 use, the per-run cost is small, but it matters when (a) the app is restarted by a
+    // session-recycling autostart wrapper, (b) the user toggles a hypothetical future re-init, or
+    // (c) just because leaking GDI handles is a smell that hides real leaks later.
+    private Icon? _ownedIcon;
+    private WinForms.ContextMenuStrip? _ownedMenu;
+    private Font? _ownedMenuFont;
 
     public TrayPresenter(ISettingsService settings, ISettingsDialog settingsDialog, IErrorReporter reporter, IToastService toasts, ILocalizationService localization)
     {
@@ -47,14 +55,16 @@ public sealed class TrayPresenter : ITrayPresenter
 
         try
         {
+            _ownedIcon = BuildTrayIcon();
             _icon = new WinForms.NotifyIcon
             {
                 Visible = true,
                 Text = "OopsType",
-                Icon = BuildTrayIcon(),
+                Icon = _ownedIcon,
             };
             _icon.DoubleClick += OnDoubleClick;
-            _icon.ContextMenuStrip = BuildContextMenu();
+            _ownedMenu = BuildContextMenu();
+            _icon.ContextMenuStrip = _ownedMenu;
 
             // One subscription drives every checkbox refresh instead of one handler per item.
             _settings.Changed += RefreshAllItems;
@@ -66,7 +76,13 @@ public sealed class TrayPresenter : ITrayPresenter
             _reporter.Report("TrayPresenter.Start", ex);
             // Roll back so a partially-constructed icon doesn't cause Dispose issues.
             try { _icon?.Dispose(); } catch { }
+            try { _ownedMenu?.Dispose(); } catch { }
+            try { _ownedMenuFont?.Dispose(); } catch { }
+            try { _ownedIcon?.Dispose(); } catch { }
             _icon = null;
+            _ownedMenu = null;
+            _ownedMenuFont = null;
+            _ownedIcon = null;
         }
     }
 
@@ -75,12 +91,15 @@ public sealed class TrayPresenter : ITrayPresenter
 
     private WinForms.ContextMenuStrip BuildContextMenu()
     {
+        // Track the Font separately so Dispose can release it — ContextMenuStrip doesn't take
+        // ownership of a Font you assign through the property setter.
+        _ownedMenuFont = new Font("Segoe UI Variable Text", 9.5f, System.Drawing.FontStyle.Regular, GraphicsUnit.Point);
         var menu = new WinForms.ContextMenuStrip
         {
             Renderer = new FluentMenuRenderer(),
             ShowImageMargin = false,
             ShowCheckMargin = true,
-            Font = new Font("Segoe UI Variable Text", 9.5f, System.Drawing.FontStyle.Regular, GraphicsUnit.Point),
+            Font = _ownedMenuFont,
             BackColor = FluentMenuPalette.Background,
             ForeColor = FluentMenuPalette.Text,
             Padding = new Padding(4),
@@ -213,7 +232,15 @@ public sealed class TrayPresenter : ITrayPresenter
         try { _localization.LanguageChanged -= RetranslateAllItems; } catch { }
         try { _icon.Visible = false; } catch { }
         try { _icon.Dispose(); } catch { }
+        // ContextMenuStrip first (it references the Font), then Font, then Icon. Each in its own
+        // try so one stuck handle can't strand the others.
+        try { _ownedMenu?.Dispose(); } catch { }
+        try { _ownedMenuFont?.Dispose(); } catch { }
+        try { _ownedIcon?.Dispose(); } catch { }
         _icon = null;
+        _ownedMenu = null;
+        _ownedMenuFont = null;
+        _ownedIcon = null;
     }
 }
 

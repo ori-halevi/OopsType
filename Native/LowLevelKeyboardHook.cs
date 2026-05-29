@@ -10,6 +10,12 @@ namespace OopsType.Native;
 /// Global low-level keyboard hook. Must be installed from a thread with a message pump (the WPF
 /// UI thread). Windows enforces <c>LowLevelHooksTimeout</c> (~300ms) and will silently unhook a
 /// slow callback — keep the path through <see cref="HookCallback"/> trivial.
+///
+/// <para><see cref="EnsureInstalled"/> can be called periodically from a watchdog to recover from
+/// (a) initial install failure (transient AV interference, hMod resolution race), and (b) Windows
+/// having silently unhooked us because a downstream subscriber blew the timeout budget. Without
+/// this, a single bad day's slow UI Automation call would permanently kill keyboard tracking
+/// until the user restarts the app.</para>
 /// </summary>
 internal sealed class LowLevelKeyboardHook : IDisposable
 {
@@ -28,6 +34,16 @@ internal sealed class LowLevelKeyboardHook : IDisposable
 
     /// <summary>True when SetWindowsHookEx succeeded. False means we silently degrade (no key events).</summary>
     public bool IsInstalled => _hook != IntPtr.Zero;
+
+    /// <summary>
+    /// No-op if the hook is currently installed. Otherwise attempts a fresh
+    /// <c>SetWindowsHookEx</c>. Errors are reported but never thrown — safe inside a watchdog tick.
+    /// </summary>
+    public void EnsureInstalled()
+    {
+        if (_hook != IntPtr.Zero) return;
+        _hook = InstallHook();
+    }
 
     private IntPtr InstallHook()
     {
