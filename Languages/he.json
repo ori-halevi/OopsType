@@ -99,6 +99,11 @@
     "General_Language_Tooltip": "השפה בה ישתמש חלון ההגדרות ותפריט המגש. מתגלה אוטומטית מקבצי JSON שבתיקיית 'Languages'.",
     "General_Language_Hint": "הוסף שפה חדשה ע״י העתקת קובץ JSON לתיקיית 'Languages' שליד OopsType.exe או תחת %LOCALAPPDATA%\\OopsType\\Languages.",
 
+    "About_Title": "אודות",
+    "About_Version": "גרסה",
+    "About_Repository": "צפייה ב-GitHub",
+    "About_License": "רישיון Apache 2.0",
+
     "Footer_AllSaved": "כל השינויים נשמרו",
     "Footer_Unsaved": "שינויים שלא נשמרו",
     "Footer_Save": "שמור",

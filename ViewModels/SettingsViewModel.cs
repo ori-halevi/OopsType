@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Windows.Input;
 using System.Windows.Media;
 using OopsType.Infrastructure;
@@ -254,6 +255,33 @@ public sealed class SettingsViewModel : BindableBase
     // ---- General ----
     private bool _autostart;
     public bool Autostart { get => _autostart; set => SetProperty(ref _autostart, value); }
+
+    // ---- About ----
+    // Read once from the running assembly so the metadata baked in by the .csproj (<Version>,
+    // <Copyright>) is the single source of truth — the About card never hardcodes a version.
+
+    /// <summary>App version shown on the About card, e.g. "1.0.0". Sourced from
+    /// AssemblyInformationalVersion (falls back to the assembly version, then "—").</summary>
+    public string AppVersion { get; } = ResolveAppVersion();
+
+    /// <summary>Copyright line shown on the About card. Sourced from AssemblyCopyright, set by
+    /// the &lt;Copyright&gt; csproj property.</summary>
+    public string AppCopyright { get; } =
+        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "";
+
+    private static string ResolveAppVersion()
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(info))
+        {
+            // .NET appends a "+<git-sha>" source-revision suffix to InformationalVersion; trim it
+            // so the UI shows a clean "1.0.0" rather than "1.0.0+a1b2c3d".
+            var plus = info.IndexOf('+');
+            return plus >= 0 ? info[..plus] : info;
+        }
+        return asm.GetName().Version?.ToString() ?? "—";
+    }
 
     // ---- Language ----
     public ObservableCollection<LanguagePack> AvailableLanguages { get; }

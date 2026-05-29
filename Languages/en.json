@@ -99,6 +99,11 @@
     "General_Language_Tooltip": "Language used by the settings window and tray menu. Discovered automatically from JSON files in the 'Languages' folder.",
     "General_Language_Hint": "Add a new language by dropping a JSON file into the 'Languages' folder next to OopsType.exe, or under %LOCALAPPDATA%\\OopsType\\Languages.",
 
+    "About_Title": "About",
+    "About_Version": "Version",
+    "About_Repository": "View on GitHub",
+    "About_License": "Apache 2.0 License",
+
     "Footer_AllSaved": "All changes saved",
     "Footer_Unsaved": "Unsaved changes",
     "Footer_Save": "Save",

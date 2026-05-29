@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
+using System.Windows.Navigation;
 using System.Windows.Threading;
 using OopsType.Services.Localization;
 using OopsType.ViewModels;
@@ -39,6 +41,23 @@ public partial class SettingsWindow : Wpf.Ui.Controls.FluentWindow
 
     private void OnLanguageChanged() =>
         Dispatcher.BeginInvoke(new Action(ApplyFlowDirection));
+
+    // Opens the About card's links (e.g. the GitHub repo) in the user's default browser.
+    // UseShellExecute is required for ShellExecute to resolve the http(s) handler; without it
+    // Process.Start treats the URI as an executable path and throws. Failures are swallowed —
+    // a dead "open browser" link is a cosmetic nuisance, not worth interrupting the user.
+    private void OnRequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Intentionally ignored — no browser, blocked URI scheme, etc.
+        }
+        e.Handled = true;
+    }
 
     private void ApplyFlowDirection()
     {

@@ -12,6 +12,27 @@
     <!-- Embedded as the EXE's shell icon (taskbar, Alt-Tab, file explorer). -->
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- ===== Product & version metadata =====
+       Single source of truth for the app version. It is compiled into the EXE (visible in the
+       file's Properties → Details tab) and read back at runtime by the About card in the settings
+       window via AssemblyInformationalVersionAttribute / AssemblyCopyrightAttribute — so bumping
+       <Version> here updates both the binary and the UI. Bump <Version> for every release. -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>OopsType</Product>
+    <Authors>Ori Halevi</Authors>
+    <Company>Ori Halevi</Company>
+    <Copyright>Copyright © 2026 Ori Halevi</Copyright>
+    <Description>Lightweight Windows tray utility that shows your active keyboard layout next to your caret, mouse, and taskbar — so you stop typing in the wrong language.</Description>
+    <NeutralLanguage>en</NeutralLanguage>
+    <RepositoryUrl>https://github.com/ori-halevi/OopsType</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/ori-halevi/OopsType</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Prism.Unity" Version="9.0.537" />
     <PackageReference Include="WPF-UI" Version="4.0.2" />
