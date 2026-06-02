@@ -20,6 +20,13 @@ public sealed class CaretLabelSettings
     public int OffsetY { get; set; } = 0;
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
+
+    /// <summary>0.0 = invisible, 1.0 = fully opaque. Applied to the whole chip (background, text, border).</summary>
+    public double Opacity { get; set; } = 1.0;
+
+    /// <summary>Per-language chip appearance. Key is the two-letter layout code (lowercase, e.g. "he").
+    /// A language with no entry falls back to the built-in dark chip with white text and no border.</summary>
+    public Dictionary<string, LabelLangStyle> Colors { get; set; } = new();
 }
 
 public sealed class MouseLabelSettings
@@ -31,6 +38,13 @@ public sealed class MouseLabelSettings
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
 
+    /// <summary>0.0 = invisible, 1.0 = fully opaque. Applied to the whole chip (background, text, border).</summary>
+    public double Opacity { get; set; } = 1.0;
+
+    /// <summary>Per-language chip appearance. Key is the two-letter layout code (lowercase, e.g. "he").
+    /// A language with no entry falls back to the built-in dark chip with white text and no border.</summary>
+    public Dictionary<string, LabelLangStyle> Colors { get; set; } = new();
+
     /// <summary>
     /// "economy" (default) — subscribe to CompositionTarget.Rendering only while the mouse is
     /// moving (driven by a global mouse hook), unsubscribe shortly after it stops. Zero work at
@@ -39,6 +53,23 @@ public sealed class MouseLabelSettings
     /// on the first frame of motion, at the cost of a per-frame tick that never stops.
     /// </summary>
     public string TrackingMode { get; set; } = "economy";
+}
+
+/// <summary>
+/// Per-language appearance for a caret/mouse label chip. Hex strings accept #RGB, #RRGGBB and
+/// #AARRGGBB (so the user can encode per-color alpha directly). <see cref="BorderThickness"/> in
+/// DIPs — 0 means "no border", in which case <see cref="BorderColor"/> is ignored.
+/// </summary>
+public sealed class LabelLangStyle
+{
+    /// <summary>Chip background (fill) color.</summary>
+    public string Background { get; set; } = "#CC222222";
+    /// <summary>Text (glyph) color.</summary>
+    public string Foreground { get; set; } = "#FFFFFFFF";
+    /// <summary>Border stroke color. Ignored when <see cref="BorderThickness"/> is 0.</summary>
+    public string BorderColor { get; set; } = "#FF000000";
+    /// <summary>Border stroke width in DIPs. 0 = no border.</summary>
+    public double BorderThickness { get; set; } = 0;
 }
 
 public sealed class TaskbarStripSettings

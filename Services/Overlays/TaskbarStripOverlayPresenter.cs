@@ -59,7 +59,10 @@ public sealed class TaskbarStripOverlayPresenter : IOverlayPresenter
         _viewModel = _vmFactory();
         _overlay = _viewFactory();
         _overlay.DataContext = _viewModel;
-        _overlay.Show();
+        // The strip is a persistent indicator that must survive "Show Desktop" (Win+D); the
+        // caret/mouse overlays don't opt in because they hide themselves per-frame anyway.
+        _overlay.KeepVisibleThroughShowDesktop = true;
+        _overlay.ShowOverlay();
         _overlay.EnsureTopmost();
     }
 
@@ -81,7 +84,7 @@ public sealed class TaskbarStripOverlayPresenter : IOverlayPresenter
         if (!_taskbar.TryGetPrimaryTaskbarRect(out var taskbar))
         {
             if (_overlay.Visibility == Visibility.Visible)
-                _overlay.Visibility = Visibility.Hidden;
+                _overlay.SetVisible(false);
             return;
         }
 
@@ -94,7 +97,7 @@ public sealed class TaskbarStripOverlayPresenter : IOverlayPresenter
         _overlay.PositionInScreenPixels(taskbar.X, y, taskbar.Width, thickness);
 
         if (_overlay.Visibility != Visibility.Visible)
-            _overlay.Visibility = Visibility.Visible;
+            _overlay.SetVisible(true);
 
         // "behind" relies on the Win11 acrylic letting the strip's color bleed through.
         var behind = string.Equals(settings.Placement, "behind", StringComparison.OrdinalIgnoreCase);

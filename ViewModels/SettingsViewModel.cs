@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using OopsType.Infrastructure;
@@ -35,47 +37,38 @@ public sealed class SettingsViewModel : BindableBase
         _reporter = reporter;
 
         AvailableLanguages = new ObservableCollection<LanguagePack>(_localization.AvailableLanguages);
-        // Pre-select the saved language pack object, not just its code, so the ComboBox can
-        // bind to SelectedItem (richer than SelectedValue — gives us access to NativeName etc.)
-        _selectedLanguage = ResolveSelectedLanguage(settings.Current.General.Language);
 
-        var s = _settings.Current;
-        _caretEnabled = s.CaretLabel.Enabled;
-        _caretOffsetX = s.CaretLabel.OffsetX;
-        _caretOffsetY = s.CaretLabel.OffsetY;
-        _caretFont = s.CaretLabel.Font;
-        _caretSize = s.CaretLabel.Size;
-
-        _mouseEnabled = s.MouseLabel.Enabled;
-        _mouseOffsetX = s.MouseLabel.OffsetX;
-        _mouseOffsetY = s.MouseLabel.OffsetY;
-        _mouseFont = s.MouseLabel.Font;
-        _mouseSize = s.MouseLabel.Size;
-        _mouseTrackingMode = NormalizeTrackingMode(s.MouseLabel.TrackingMode);
-
-        _stripEnabled = s.TaskbarStrip.Enabled;
-        _stripThickness = s.TaskbarStrip.Thickness;
-        _stripVerticalPosition = s.TaskbarStrip.VerticalPosition;
-        _stripOpacityEnabled = s.TaskbarStrip.OpacityEnabled;
-        _stripOpacity = s.TaskbarStrip.Opacity;
-        _stripPlacement = s.TaskbarStrip.Placement;
+        // The row collections are created once and only ever repopulated in-place (LoadFromSettings),
+        // so the CollectionChanged subscriptions wired below survive a Discard.
+        CaretColorRows = new ObservableCollection<LabelStyleRow>();
+        MouseColorRows = new ObservableCollection<LabelStyleRow>();
         ColorRows = new ObservableCollection<LangColorRow>();
-        ReloadColorRows();
 
-        _idleEnabled = s.IdleReset.Enabled;
-        _idleSeconds = s.IdleReset.IdleSeconds;
-        _idleTarget = s.IdleReset.TargetLang;
+        // Seed every editable field straight from the persisted settings. Reused verbatim by
+        // Discard() to throw away unsaved edits.
+        LoadFromSettings();
 
-        _autostart = _startup.IsEnabled();
+        LanguageOptions = BuildLanguageOptions();
 
         SaveCommand = new DelegateCommand(Apply, () => IsDirty).ObservesProperty(() => IsDirty);
-        AddColorCommand = new DelegateCommand(AddColorRow);
+        DiscardCommand = new DelegateCommand(Discard, () => IsDirty).ObservesProperty(() => IsDirty);
+        AddColorCommand = new DelegateCommand<string>(AddStripColor);
         RemoveColorCommand = new DelegateCommand<LangColorRow>(RemoveColorRow);
+        AddCaretColorCommand = new DelegateCommand<string>(code => AddLabelRow(CaretColorRows, code));
+        RemoveCaretColorCommand = new DelegateCommand<LabelStyleRow>(r => { if (r != null) CaretColorRows.Remove(r); });
+        AddMouseColorCommand = new DelegateCommand<string>(code => AddLabelRow(MouseColorRows, code));
+        RemoveMouseColorCommand = new DelegateCommand<LabelStyleRow>(r => { if (r != null) MouseColorRows.Remove(r); });
 
         // ---- dirty tracking ----
         // Subscribe AFTER all backing fields are seeded so initial assignments don't mark dirty.
         ColorRows.CollectionChanged += OnColorRowsChanged;
         foreach (var row in ColorRows) row.PropertyChanged += OnRowChanged;
+
+        CaretColorRows.CollectionChanged += OnCaretRowsChanged;
+        foreach (var row in CaretColorRows) row.PropertyChanged += OnCaretRowChanged;
+        MouseColorRows.CollectionChanged += OnMouseRowsChanged;
+        foreach (var row in MouseColorRows) row.PropertyChanged += OnMouseRowChanged;
+
         PropertyChanged += OnVmPropertyChanged;
         _initialized = true;
     }
@@ -109,6 +102,12 @@ public sealed class SettingsViewModel : BindableBase
     public string CaretFont { get => _caretFont; set => SetProperty(ref _caretFont, value); }
     private int _caretSize;
     public int CaretSize { get => _caretSize; set => SetProperty(ref _caretSize, ClampFontSize(value)); }
+    private double _caretOpacity;
+    public double CaretOpacity
+    {
+        get => _caretOpacity;
+        set { if (SetProperty(ref _caretOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(CaretPreviewOpacity)); }
+    }
 
     // ---- Mouse label (follows mouse cursor) ----
     private bool _mouseEnabled;
@@ -121,6 +120,12 @@ public sealed class SettingsViewModel : BindableBase
     public string MouseFont { get => _mouseFont; set => SetProperty(ref _mouseFont, value); }
     private int _mouseSize;
     public int MouseSize { get => _mouseSize; set => SetProperty(ref _mouseSize, ClampFontSize(value)); }
+    private double _mouseOpacity;
+    public double MouseOpacity
+    {
+        get => _mouseOpacity;
+        set { if (SetProperty(ref _mouseOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(MousePreviewOpacity)); }
+    }
 
     private static int ClampOffset(int value) => Math.Clamp(value, -MaxOffsetPx, MaxOffsetPx);
     private static int ClampFontSize(int value) => value <= 0 ? value : Math.Clamp(value, MinFontSize, MaxFontSize);
@@ -131,6 +136,235 @@ public sealed class SettingsViewModel : BindableBase
 
     private static string NormalizeTrackingMode(string? mode) =>
         string.Equals(mode, "max-smoothness", StringComparison.OrdinalIgnoreCase) ? "max-smoothness" : "economy";
+
+    // ---- Caret / Mouse per-language color tables ----
+    // Each label overlay gets its own table (the user asked for them to be independent), so
+    // editing the caret palette never touches the mouse palette and vice-versa.
+    public ObservableCollection<LabelStyleRow> CaretColorRows { get; }
+    public ObservableCollection<LabelStyleRow> MouseColorRows { get; }
+
+    /// <summary>True when the caret/mouse table has at least one language row. Gates the
+    /// "copy to the other label" button so the user can't mirror an empty palette.</summary>
+    public bool CaretHasColors => CaretColorRows.Count > 0;
+    public bool MouseHasColors => MouseColorRows.Count > 0;
+
+    /// <summary>
+    /// Replaces one label's per-language colors with a clone of the other's, so a user who has
+    /// carefully tuned (say) the caret palette can mirror it onto the mouse label in one click.
+    /// Rows are deep-copied (not shared) so the two tables stay independently editable afterwards.
+    /// </summary>
+    public void CopyLabelColors(bool fromCaretToMouse)
+    {
+        var source = fromCaretToMouse ? CaretColorRows : MouseColorRows;
+        var target = fromCaretToMouse ? MouseColorRows : CaretColorRows;
+        target.Clear();
+        foreach (var r in source)
+            target.Add(new LabelStyleRow
+            {
+                Code = r.Code,
+                Background = r.Background,
+                Foreground = r.Foreground,
+                BorderColor = r.BorderColor,
+                BorderThickness = r.BorderThickness,
+            });
+    }
+
+    private static void ReloadLabelRows(ObservableCollection<LabelStyleRow> rows, Dictionary<string, LabelLangStyle> source)
+    {
+        rows.Clear();
+        foreach (var kv in source)
+            rows.Add(new LabelStyleRow
+            {
+                Code = kv.Key,
+                Background = kv.Value.Background,
+                Foreground = kv.Value.Foreground,
+                BorderColor = kv.Value.BorderColor,
+                BorderThickness = kv.Value.BorderThickness,
+            });
+    }
+
+    private static void ApplyLabelRows(ObservableCollection<LabelStyleRow> rows, Dictionary<string, LabelLangStyle> target)
+    {
+        target.Clear();
+        foreach (var row in rows)
+        {
+            var code = (row.Code ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(code)) continue;
+            target[code] = new LabelLangStyle
+            {
+                Background = string.IsNullOrWhiteSpace(row.Background) ? "#CC222222" : row.Background.Trim(),
+                Foreground = string.IsNullOrWhiteSpace(row.Foreground) ? "#FFFFFFFF" : row.Foreground.Trim(),
+                BorderColor = string.IsNullOrWhiteSpace(row.BorderColor) ? "#FF000000" : row.BorderColor.Trim(),
+                BorderThickness = Math.Clamp(row.BorderThickness, 0, 20),
+            };
+        }
+    }
+
+    // New rows start from the built-in dark-chip look so a freshly-added language is immediately
+    // visible (rather than a blank/transparent chip the user then has to figure out).
+    private static LabelStyleRow NewLabelRow() => new()
+    {
+        Code = "",
+        Background = "#CC222222",
+        Foreground = "#FFFFFFFF",
+        BorderColor = "#FF000000",
+        BorderThickness = 0,
+    };
+
+    // Add a language row from the picker. Silently ignores blanks and duplicates (the same code
+    // twice would just shadow itself), so the picker never produces a broken table.
+    private static void AddLabelRow(ObservableCollection<LabelStyleRow> rows, string? code)
+    {
+        var c = (code ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(c)) return;
+        foreach (var r in rows)
+            if (string.Equals((r.Code ?? "").Trim(), c, StringComparison.OrdinalIgnoreCase)) return;
+        var row = NewLabelRow();
+        row.Code = c;
+        rows.Add(row);
+    }
+
+    // ---- Caret / Mouse live-preview projections ----
+    // The preview chip uses the FIRST configured row (mirrors the strip preview's "first row wins"
+    // rule), falling back to the built-in dark chip + "EN" when no usable row exists yet.
+    private static LabelStyleRow? FirstUsableRow(ObservableCollection<LabelStyleRow> rows)
+    {
+        foreach (var r in rows)
+            if (!string.IsNullOrWhiteSpace(r.Code)) return r;
+        return null;
+    }
+
+    private static string PreviewCodeOf(ObservableCollection<LabelStyleRow> rows)
+        => FirstUsableRow(rows)?.Code is { Length: > 0 } code ? code.Trim().ToUpperInvariant() : "EN";
+
+    private static Brush PreviewBrushOf(ObservableCollection<LabelStyleRow> rows, Func<LabelStyleRow, string> pick, Brush fallback)
+    {
+        var row = FirstUsableRow(rows);
+        if (row == null) return fallback;
+        return LabelStyleBrushes.ParseQuiet(pick(row)) ?? fallback;
+    }
+
+    private static readonly Brush PreviewDefaultBackground = LabelStyleBrushes.ParseQuiet("#CC222222")!;
+    private static readonly Brush PreviewDefaultForeground = LabelStyleBrushes.ParseQuiet("#FFFFFFFF")!;
+    private static readonly Brush PreviewTransparent = LabelStyleBrushes.ParseQuiet("#00000000")!;
+
+    public string CaretPreviewCode => PreviewCodeOf(CaretColorRows);
+    public Brush CaretPreviewBackground => PreviewBrushOf(CaretColorRows, r => r.Background, PreviewDefaultBackground);
+    public Brush CaretPreviewForeground => PreviewBrushOf(CaretColorRows, r => r.Foreground, PreviewDefaultForeground);
+    public Brush CaretPreviewBorderBrush => PreviewBorderBrushOf(CaretColorRows);
+    public Thickness CaretPreviewBorderThickness => PreviewBorderThicknessOf(CaretColorRows);
+    public double CaretPreviewOpacity => _caretOpacity;
+
+    public string MousePreviewCode => PreviewCodeOf(MouseColorRows);
+    public Brush MousePreviewBackground => PreviewBrushOf(MouseColorRows, r => r.Background, PreviewDefaultBackground);
+    public Brush MousePreviewForeground => PreviewBrushOf(MouseColorRows, r => r.Foreground, PreviewDefaultForeground);
+    public Brush MousePreviewBorderBrush => PreviewBorderBrushOf(MouseColorRows);
+    public Thickness MousePreviewBorderThickness => PreviewBorderThicknessOf(MouseColorRows);
+    public double MousePreviewOpacity => _mouseOpacity;
+
+    private static Brush PreviewBorderBrushOf(ObservableCollection<LabelStyleRow> rows)
+    {
+        var row = FirstUsableRow(rows);
+        if (row == null || row.BorderThickness <= 0) return PreviewTransparent;
+        return LabelStyleBrushes.ParseQuiet(row.BorderColor) ?? PreviewTransparent;
+    }
+
+    private static Thickness PreviewBorderThicknessOf(ObservableCollection<LabelStyleRow> rows)
+    {
+        var row = FirstUsableRow(rows);
+        if (row == null || row.BorderThickness <= 0) return new Thickness(0);
+        // Only show the border in the preview if the color actually parses, so a bad hex doesn't
+        // leave a phantom border with no visible stroke.
+        return LabelStyleBrushes.ParseQuiet(row.BorderColor) == null ? new Thickness(0) : new Thickness(row.BorderThickness);
+    }
+
+    private static readonly string[] CaretPreviewProps =
+    {
+        nameof(CaretPreviewCode), nameof(CaretPreviewBackground), nameof(CaretPreviewForeground),
+        nameof(CaretPreviewBorderBrush), nameof(CaretPreviewBorderThickness),
+    };
+    private static readonly string[] MousePreviewProps =
+    {
+        nameof(MousePreviewCode), nameof(MousePreviewBackground), nameof(MousePreviewForeground),
+        nameof(MousePreviewBorderBrush), nameof(MousePreviewBorderThickness),
+    };
+
+    private void RaiseCaretPreview() { foreach (var p in CaretPreviewProps) RaisePropertyChanged(p); }
+    private void RaiseMousePreview() { foreach (var p in MousePreviewProps) RaisePropertyChanged(p); }
+
+    private void OnCaretRowChanged(object? sender, PropertyChangedEventArgs e) { MarkDirty(); RaiseCaretPreview(); }
+    private void OnMouseRowChanged(object? sender, PropertyChangedEventArgs e) { MarkDirty(); RaiseMousePreview(); }
+
+    private void OnCaretRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RewireRows(e, OnCaretRowChanged);
+        MarkDirty();
+        RaiseCaretPreview();
+        RaisePropertyChanged(nameof(CaretHasColors));
+    }
+
+    private void OnMouseRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RewireRows(e, OnMouseRowChanged);
+        MarkDirty();
+        RaiseMousePreview();
+        RaisePropertyChanged(nameof(MouseHasColors));
+    }
+
+    private static void RewireRows(NotifyCollectionChangedEventArgs e, PropertyChangedEventHandler handler)
+    {
+        if (e.NewItems != null)
+            foreach (LabelStyleRow r in e.NewItems) r.PropertyChanged += handler;
+        if (e.OldItems != null)
+            foreach (LabelStyleRow r in e.OldItems) r.PropertyChanged -= handler;
+    }
+
+    /// <summary>True when the active UI language flows right-to-left (e.g. Hebrew). Bound by the
+    /// Idle-reset preview to mirror its arrow glyph; the caret/mouse previews stay LTR regardless.</summary>
+    public bool IsRtl => string.Equals(_localization.CurrentLanguage.FlowDirection, "RightToLeft", StringComparison.OrdinalIgnoreCase);
+
+    // ---- Add-language picker catalog ----
+    // Shared by all three color tables (caret/mouse/strip). Built from the framework's neutral
+    // cultures so the list is comprehensive and self-localizing, with the layouts actually
+    // installed on this machine sorted and grouped first (that's almost always what the user wants).
+    public ObservableCollection<LanguageOption> LanguageOptions { get; }
+
+    private ObservableCollection<LanguageOption> BuildLanguageOptions()
+    {
+        var installed = new HashSet<string>(
+            _layout.GetInstalledLayouts().Select(l => l.TwoLetterCode.ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var groupInstalled = _localization.T("Lang_GroupInstalled");
+        var groupAll = _localization.T("Lang_GroupAll");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var options = new List<LanguageOption>();
+        foreach (var c in CultureInfo.GetCultures(CultureTypes.NeutralCultures))
+        {
+            var code = c.TwoLetterISOLanguageName?.ToLowerInvariant();
+            // "iv" is the invariant culture — not a real language the user would tag a layout with.
+            if (string.IsNullOrEmpty(code) || code == "iv") continue;
+            if (!seen.Add(code)) continue;
+            var isInstalled = installed.Contains(code);
+            options.Add(new LanguageOption(
+                code,
+                CapitalizeFirst(c.NativeName),
+                c.EnglishName,
+                isInstalled,
+                isInstalled ? groupInstalled : groupAll));
+        }
+
+        var ordered = options
+            .OrderByDescending(o => o.IsInstalled)
+            .ThenBy(o => o.EnglishName, StringComparer.CurrentCultureIgnoreCase);
+        return new ObservableCollection<LanguageOption>(ordered);
+    }
+
+    // Several languages' NativeName comes back lowercased (e.g. "עברית" is fine, but many Latin
+    // scripts return "español"); title-casing the first letter keeps the picker tidy.
+    private static string CapitalizeFirst(string s)
+        => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
 
     // ---- Strip ----
     private bool _stripEnabled;
@@ -202,7 +436,15 @@ public sealed class SettingsViewModel : BindableBase
             ColorRows.Add(new LangColorRow { Code = kv.Key, Color = kv.Value });
     }
 
-    private void AddColorRow() => ColorRows.Add(new LangColorRow { Code = "", Color = "#888888" });
+    private void AddStripColor(string? code)
+    {
+        var c = (code ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(c)) return;
+        foreach (var r in ColorRows)
+            if (string.Equals((r.Code ?? "").Trim(), c, StringComparison.OrdinalIgnoreCase)) return;
+        ColorRows.Add(new LangColorRow { Code = c, Color = "#3B82F6" });
+    }
+
     private void RemoveColorRow(LangColorRow? row) { if (row != null) ColorRows.Remove(row); }
 
     /// <summary>Language code shown inside the preview cards. Uses the first configured row, or "EN" as a fallback.</summary>
@@ -336,6 +578,18 @@ public sealed class SettingsViewModel : BindableBase
             case nameof(EffectiveStripOpacity):
             case nameof(PreviewCode):
             case nameof(PreviewColor):
+            case nameof(CaretPreviewCode):
+            case nameof(CaretPreviewBackground):
+            case nameof(CaretPreviewForeground):
+            case nameof(CaretPreviewBorderBrush):
+            case nameof(CaretPreviewBorderThickness):
+            case nameof(CaretPreviewOpacity):
+            case nameof(MousePreviewCode):
+            case nameof(MousePreviewBackground):
+            case nameof(MousePreviewForeground):
+            case nameof(MousePreviewBorderBrush):
+            case nameof(MousePreviewBorderThickness):
+            case nameof(MousePreviewOpacity):
                 return;
         }
         MarkDirty();
@@ -360,8 +614,78 @@ public sealed class SettingsViewModel : BindableBase
     }
 
     public ICommand SaveCommand { get; }
+    public ICommand DiscardCommand { get; }
     public ICommand AddColorCommand { get; }
     public ICommand RemoveColorCommand { get; }
+    public ICommand AddCaretColorCommand { get; }
+    public ICommand RemoveCaretColorCommand { get; }
+    public ICommand AddMouseColorCommand { get; }
+    public ICommand RemoveMouseColorCommand { get; }
+
+    /// <summary>
+    /// Seeds every editable field (and the three color tables) from the persisted settings.
+    /// Called once from the constructor and again by <see cref="Discard"/>; the row collections
+    /// are repopulated in-place so their CollectionChanged subscriptions stay intact.
+    /// </summary>
+    private void LoadFromSettings()
+    {
+        var s = _settings.Current;
+
+        // Pre-select the saved language pack object, not just its code, so the ComboBox can
+        // bind to SelectedItem (richer than SelectedValue — gives us access to NativeName etc.)
+        _selectedLanguage = ResolveSelectedLanguage(s.General.Language);
+
+        _caretEnabled = s.CaretLabel.Enabled;
+        _caretOffsetX = s.CaretLabel.OffsetX;
+        _caretOffsetY = s.CaretLabel.OffsetY;
+        _caretFont = s.CaretLabel.Font;
+        _caretSize = s.CaretLabel.Size;
+        _caretOpacity = Math.Clamp(s.CaretLabel.Opacity, 0.0, 1.0);
+
+        _mouseEnabled = s.MouseLabel.Enabled;
+        _mouseOffsetX = s.MouseLabel.OffsetX;
+        _mouseOffsetY = s.MouseLabel.OffsetY;
+        _mouseFont = s.MouseLabel.Font;
+        _mouseSize = s.MouseLabel.Size;
+        _mouseOpacity = Math.Clamp(s.MouseLabel.Opacity, 0.0, 1.0);
+        _mouseTrackingMode = NormalizeTrackingMode(s.MouseLabel.TrackingMode);
+
+        ReloadLabelRows(CaretColorRows, s.CaretLabel.Colors);
+        ReloadLabelRows(MouseColorRows, s.MouseLabel.Colors);
+
+        _stripEnabled = s.TaskbarStrip.Enabled;
+        _stripThickness = s.TaskbarStrip.Thickness;
+        _stripVerticalPosition = s.TaskbarStrip.VerticalPosition;
+        _stripOpacityEnabled = s.TaskbarStrip.OpacityEnabled;
+        _stripOpacity = s.TaskbarStrip.Opacity;
+        _stripPlacement = s.TaskbarStrip.Placement;
+        ReloadColorRows();
+
+        _idleEnabled = s.IdleReset.Enabled;
+        _idleSeconds = s.IdleReset.IdleSeconds;
+        _idleTarget = s.IdleReset.TargetLang;
+
+        _autostart = _startup.IsEnabled();
+    }
+
+    /// <summary>
+    /// Throws away every unsaved edit by re-seeding from the last persisted settings, then clears
+    /// the dirty flag. Nothing is written to disk and the window stays open, so the user can keep
+    /// working from a clean slate. The blanket change notification re-evaluates all bindings
+    /// (scalar fields, previews and the repopulated color tables) at once.
+    /// </summary>
+    public void Discard()
+    {
+        if (!IsDirty) return;
+
+        LoadFromSettings();
+
+        // Refresh every binding in one shot — empty name means "all properties changed" in WPF.
+        // Repopulating the row collections above already raised their per-table dirty/preview
+        // notifications, so resetting IsDirty last lands the VM back on a clean slate.
+        RaisePropertyChanged(string.Empty);
+        IsDirty = false;
+    }
 
     /// <summary>
     /// Projects VM state into settings and persists. Does NOT close the window.
@@ -387,13 +711,17 @@ public sealed class SettingsViewModel : BindableBase
         s.CaretLabel.OffsetY = CaretOffsetY;
         s.CaretLabel.Font = CaretFont;
         s.CaretLabel.Size = CaretSize;
+        s.CaretLabel.Opacity = Math.Clamp(CaretOpacity, 0.0, 1.0);
+        ApplyLabelRows(CaretColorRows, s.CaretLabel.Colors);
 
         s.MouseLabel.Enabled = MouseEnabled;
         s.MouseLabel.OffsetX = MouseOffsetX;
         s.MouseLabel.OffsetY = MouseOffsetY;
         s.MouseLabel.Font = MouseFont;
         s.MouseLabel.Size = MouseSize;
+        s.MouseLabel.Opacity = Math.Clamp(MouseOpacity, 0.0, 1.0);
         s.MouseLabel.TrackingMode = NormalizeTrackingMode(MouseTrackingMode);
+        ApplyLabelRows(MouseColorRows, s.MouseLabel.Colors);
 
         s.TaskbarStrip.Enabled = StripEnabled;
         s.TaskbarStrip.Thickness = StripThickness ?? "small";
@@ -423,6 +751,8 @@ public sealed class SettingsViewModel : BindableBase
         {
             s.General.Language = chosenCode;
             _localization.SetLanguage(chosenCode);
+            // The UI language may have flipped LTR/RTL — refresh the idle-preview arrow direction.
+            RaisePropertyChanged(nameof(IsRtl));
         }
 
         _settings.Save();
@@ -438,4 +768,28 @@ public sealed class LangColorRow : BindableBase
     private string _color = "#888888";
     public string Code { get => _code; set => SetProperty(ref _code, value); }
     public string Color { get => _color; set => SetProperty(ref _color, value); }
+}
+
+/// <summary>One editable row in a caret/mouse label color table: a language code mapped to the
+/// chip's background, text and border appearance. <see cref="BorderThickness"/> of 0 = no border.</summary>
+public sealed class LabelStyleRow : BindableBase
+{
+    private string _code = "";
+    private string _background = "#CC222222";
+    private string _foreground = "#FFFFFFFF";
+    private string _borderColor = "#FF000000";
+    private double _borderThickness;
+    public string Code { get => _code; set => SetProperty(ref _code, value); }
+    public string Background { get => _background; set => SetProperty(ref _background, value); }
+    public string Foreground { get => _foreground; set => SetProperty(ref _foreground, value); }
+    public string BorderColor { get => _borderColor; set => SetProperty(ref _borderColor, value); }
+    public double BorderThickness
+    {
+        get => _borderThickness;
+        set { if (SetProperty(ref _borderThickness, value)) RaisePropertyChanged(nameof(BorderThicknessUniform)); }
+    }
+
+    /// <summary>Uniform <see cref="Thickness"/> projection of <see cref="BorderThickness"/> for the
+    /// swatch's BorderThickness binding (Border expects a Thickness, not a bare double).</summary>
+    public Thickness BorderThicknessUniform => new(_borderThickness);
 }

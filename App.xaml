@@ -11,6 +11,9 @@
                 <ui:ThemesDictionary Theme="Light" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+            <!-- App-level so it resolves from inside Popup visual trees (e.g. the language picker),
+                 which don't chain back to a control's local resources. -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisCollapsed"/>
         </ResourceDictionary>
     </Application.Resources>
 </prism:PrismApplication>

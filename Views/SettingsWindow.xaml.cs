@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Navigation;
 using System.Windows.Threading;
@@ -57,6 +58,33 @@ public partial class SettingsWindow : Wpf.Ui.Controls.FluentWindow
             // Intentionally ignored — no browser, blocked URI scheme, etc.
         }
         e.Handled = true;
+    }
+
+    // ---- "Copy Language colors to the other label" -------------------------------------------
+    // Lets a user mirror a palette they tuned on one label onto the other in a single click.
+    // The confirm (only when the target already has rows) follows the same Wpf.Ui MessageBox
+    // pattern as the unsaved-changes prompt, so the dialog styling stays consistent.
+    private async void OnCopyCaretToMouse(object sender, RoutedEventArgs e) => await CopyLabelColorsAsync(fromCaretToMouse: true);
+
+    private async void OnCopyMouseToCaret(object sender, RoutedEventArgs e) => await CopyLabelColorsAsync(fromCaretToMouse: false);
+
+    private async Task CopyLabelColorsAsync(bool fromCaretToMouse)
+    {
+        var targetHasColors = fromCaretToMouse ? _vm.MouseHasColors : _vm.CaretHasColors;
+        if (targetHasColors)
+        {
+            var dialog = new Wpf.Ui.Controls.MessageBox
+            {
+                Title = _loc.T("Dialog_UnsavedTitle"),
+                Content = _loc.T("Label_CopyConfirmMessage"),
+                PrimaryButtonText = _loc.T("Label_CopyConfirmReplace"),
+                CloseButtonText = _loc.T("Dialog_Cancel"),
+                PrimaryButtonAppearance = ControlAppearance.Primary,
+            };
+            if (await dialog.ShowDialogAsync() != Wpf.Ui.Controls.MessageBoxResult.Primary) return;
+        }
+
+        _vm.CopyLabelColors(fromCaretToMouse);
     }
 
     private void ApplyFlowDirection()

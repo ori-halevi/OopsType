@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Text;
 using OopsType.Models;
 using OopsType.Native;
 
@@ -90,20 +91,71 @@ public sealed class CaretLocationService : ICaretLocationService
             var sel = tp.GetSelection();
             if (sel == null || sel.Length == 0) return false;
 
-            var ranges = sel[0].GetBoundingRectangles();
-            if (ranges == null || ranges.Length == 0) return false;
+            // First try the selection range as-is. When the user has actually selected text this
+            // yields a real rect. When the caret is collapsed (no selection — the common case while
+            // typing), many providers (Chromium, WPF, WinUI, Win32 edit) return ZERO bounding
+            // rectangles for the degenerate range, which is why the label used to silently vanish
+            // in those text areas. In that case we widen a *clone* to one character so the provider
+            // has a glyph to measure, then anchor to the caret edge of that character.
+            if (TryRectFromRange(sel[0], out rect)) return true;
+            if (TryRectFromCollapsedCaret(sel[0], out rect)) return true;
 
-            var r = ranges[0];
-            if (r.Width < 0 || r.Height <= 0) return false;
-            if (double.IsInfinity(r.X) || double.IsInfinity(r.Y)) return false;
-
-            rect = new Rect(r.X, r.Y, Math.Max(1, r.Width), Math.Max(4, r.Height));
-            return true;
+            return false;
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>Reads the first bounding rectangle of a text range, rejecting empty/degenerate ones.</summary>
+    private static bool TryRectFromRange(TextPatternRange range, out Rect rect)
+    {
+        rect = default;
+        var ranges = range.GetBoundingRectangles();
+        if (ranges == null || ranges.Length == 0) return false;
+
+        var r = ranges[0];
+        if (r.Width <= 0 || r.Height <= 0) return false;
+        if (double.IsInfinity(r.X) || double.IsInfinity(r.Y)) return false;
+
+        rect = new Rect(r.X, r.Y, Math.Max(1, r.Width), Math.Max(4, r.Height));
+        return true;
+    }
+
+    /// <summary>
+    /// Recovers a caret rect from a collapsed (zero-length) selection by expanding a clone to one
+    /// character. Tries the character *after* the caret first; if the caret sits at end-of-text
+    /// (nothing after it) we expand to the character *before* and anchor to that one's right edge.
+    /// The returned rect is collapsed to the caret edge so the chip sits exactly at the caret, not
+    /// spread across the measured glyph.
+    /// </summary>
+    private static bool TryRectFromCollapsedCaret(TextPatternRange selection, out Rect rect)
+    {
+        rect = default;
+
+        // Character after the caret → anchor to its LEFT edge (where the caret is).
+        var forward = selection.Clone();
+        forward.ExpandToEnclosingUnit(TextUnit.Character);
+        if (TryRectFromRange(forward, out var fr))
+        {
+            rect = new Rect(fr.X, fr.Y, 1, fr.Height);
+            return true;
+        }
+
+        // End of text: walk one character back, anchor to its RIGHT edge.
+        var backward = selection.Clone();
+        if (backward.Move(TextUnit.Character, -1) != 0)
+        {
+            backward.ExpandToEnclosingUnit(TextUnit.Character);
+            if (TryRectFromRange(backward, out var br))
+            {
+                rect = new Rect(br.X + br.Width, br.Y, 1, br.Height);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static CaretInfo None() => new(false, default, CaretSource.None);

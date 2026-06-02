@@ -21,6 +21,10 @@ internal static class NativeMethods
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_HIDEWINDOW = 0x0080;
+
+    // ---- Window position change notification ----
+    public const int WM_WINDOWPOSCHANGING = 0x0046;
 
     // ---- WinEvent ----
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
@@ -54,6 +58,18 @@ internal static class NativeMethods
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public uint flags;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct CURSORINFO
