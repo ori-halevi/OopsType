@@ -50,10 +50,18 @@ public partial class SettingsWindow : Wpf.Ui.Controls.FluentWindow
     private void OnLanguageChanged() =>
         Dispatcher.BeginInvoke(new Action(ApplyFlowDirection));
 
-    // Any field text edit is a real user change — let the VM enable Save right away. Init-time
-    // binding noise is harmless: the Loaded/ApplicationIdle ResetDirty above clears it.
-    private void OnFieldTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) =>
-        _vm.NotifyFieldEdited();
+    // A field text edit is only a real user change when the user is actually typing into that
+    // control — i.e. it holds keyboard focus. WPF also raises TextChanged for non-user reasons:
+    // a NumberBox / editable ComboBox re-formats and re-pushes its text when its page goes from
+    // Collapsed to Visible (tab switch), and Discard's blanket RaisePropertyChanged refresh
+    // re-seeds every field. Those fire on controls that don't hold focus (focus is on the nav
+    // item or the Discard button), so gating on focus stops a tab switch — and a post-Discard
+    // refresh — from spuriously enabling Save. (The genuine value still commits on focus loss.)
+    private void OnFieldTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (e.OriginalSource is UIElement source && source.IsKeyboardFocusWithin)
+            _vm.NotifyFieldEdited();
+    }
 
     // Opens the About card's links (e.g. the GitHub repo) in the user's default browser.
     // UseShellExecute is required for ShellExecute to resolve the http(s) handler; without it
