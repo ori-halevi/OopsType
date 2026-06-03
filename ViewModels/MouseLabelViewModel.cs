@@ -34,6 +34,8 @@ public sealed class MouseLabelViewModel : BindableBase, IDisposable
     private Brush _borderBrush = DefaultBorderBrush;
     private Thickness _borderThickness;
     private double _labelOpacity = 1.0;
+    private FontWeight _fontWeight = FontWeights.Bold;
+    private double _textOpacity = 1.0;
 
     private LanguageInfo _current = LanguageInfo.Unknown;
 
@@ -45,6 +47,13 @@ public sealed class MouseLabelViewModel : BindableBase, IDisposable
     public Brush BorderBrush { get => _borderBrush; private set => SetProperty(ref _borderBrush, value); }
     public Thickness BorderThickness { get => _borderThickness; private set => SetProperty(ref _borderThickness, value); }
     public double LabelOpacity { get => _labelOpacity; private set => SetProperty(ref _labelOpacity, value); }
+
+    /// <summary>Weight of the label text glyphs. Resolved from <see cref="MouseLabelSettings.FontWeight"/>.</summary>
+    public FontWeight FontWeight { get => _fontWeight; private set => SetProperty(ref _fontWeight, value); }
+
+    /// <summary>Opacity of the label TEXT only (0 = invisible glyph, chip stays). Multiplies on top
+    /// of <see cref="LabelOpacity"/>.</summary>
+    public double TextOpacity { get => _textOpacity; private set => SetProperty(ref _textOpacity, value); }
 
     public MouseLabelViewModel(ISettingsService settings, IKeyboardLayoutService layout, IErrorReporter reporter)
     {
@@ -73,6 +82,8 @@ public sealed class MouseLabelViewModel : BindableBase, IDisposable
         FontFamily = string.IsNullOrWhiteSpace(s.Font) ? DefaultFontFamily : s.Font;
         FontSize = s.Size <= 0 ? DefaultFontSize : s.Size;
         LabelOpacity = Math.Clamp(s.Opacity, 0.0, 1.0);
+        FontWeight = LabelStyleBrushes.ParseFontWeight(s.FontWeight);
+        TextOpacity = Math.Clamp(s.TextOpacity, 0.0, 1.0);
 
         var style = LabelStyleBrushes.Resolve(s.Colors, _current.TwoLetterCode, _reporter, "MouseLabelViewModel");
         Background = style.Background ?? DefaultBackground;

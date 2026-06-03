@@ -38,10 +38,22 @@ public partial class SettingsWindow : Wpf.Ui.Controls.FluentWindow
         // the VM dirty before the user has touched anything. Clear that initial noise once the
         // dispatcher goes idle — anything the user does after that is a real change.
         Loaded += (_, _) => Dispatcher.BeginInvoke(new Action(_vm.ResetDirty), DispatcherPriority.ApplicationIdle);
+
+        // The Wpf.Ui NumberBox only writes its Value to the binding on Enter/focus-loss, so typing in
+        // an offset/size field wouldn't enable Save — and a disabled Save can't take focus to trigger
+        // the commit, so the field would stay stuck. Catch every text edit (TextChanged bubbles up
+        // from the NumberBox/TextBox) and flag the VM dirty so Save lights up while the user types.
+        AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                   new System.Windows.Controls.TextChangedEventHandler(OnFieldTextChanged));
     }
 
     private void OnLanguageChanged() =>
         Dispatcher.BeginInvoke(new Action(ApplyFlowDirection));
+
+    // Any field text edit is a real user change — let the VM enable Save right away. Init-time
+    // binding noise is harmless: the Loaded/ApplicationIdle ResetDirty above clears it.
+    private void OnFieldTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) =>
+        _vm.NotifyFieldEdited();
 
     // Opens the About card's links (e.g. the GitHub repo) in the user's default browser.
     // UseShellExecute is required for ShellExecute to resolve the http(s) handler; without it

@@ -37,13 +37,17 @@
                 Click="OnOpen"
                 Padding="3" Height="28"
                 HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
                 Cursor="Hand"
                 ToolTip="{Binding SelectedColor, ElementName=Root}">
-            <Grid>
+            <!-- MinWidth/MinHeight guard against the themed Button's content presenter sizing the
+                 swatch to its (empty) content — without a floor the colored fill collapses to 0. -->
+            <Grid MinWidth="36" MinHeight="16">
                 <Rectangle RadiusX="3" RadiusY="3" Fill="{StaticResource Checker}"/>
                 <Border CornerRadius="3"
                         BorderBrush="#33000000" BorderThickness="1"
-                        Background="{Binding SelectedColor, ElementName=Root}"/>
+                        Background="{Binding SelectedBrush, ElementName=Root}"/>
             </Grid>
         </Button>
 

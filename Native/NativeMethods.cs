@@ -117,6 +117,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
 
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint idThread);
 
     [DllImport("user32.dll", SetLastError = true)]

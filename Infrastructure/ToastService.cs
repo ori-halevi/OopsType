@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -22,20 +23,20 @@ public sealed class ToastService : IToastService
 
     private readonly List<Window> _active = new();
 
-    public void Show(string title, string message, ToastKind kind)
+    public void Show(string title, string message, ToastKind kind, ToastCopyAction? copy = null)
     {
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher == null) return;
 
         if (!dispatcher.CheckAccess())
         {
-            dispatcher.BeginInvoke(new Action(() => Show(title, message, kind)));
+            dispatcher.BeginInvoke(new Action(() => Show(title, message, kind, copy)));
             return;
         }
 
         try
         {
-            var w = BuildToastWindow(title, message, kind);
+            var w = BuildToastWindow(title, message, kind, copy);
             _active.Add(w);
 
             // Reposition once we know our measured size — Loaded fires after layout.
@@ -89,10 +90,22 @@ public sealed class ToastService : IToastService
             };
             w.BeginAnimation(UIElement.OpacityProperty, anim);
         };
+
+        // Pause auto-dismiss while the pointer is over the toast: cancel any in-flight fade, snap
+        // back to full opacity, and hold. This keeps an interactive toast (Copy button) reachable
+        // — without it, a 5s window is easy to miss. The fade restarts when the pointer leaves.
+        w.MouseEnter += (_, _) =>
+        {
+            timer.Stop();
+            w.BeginAnimation(UIElement.OpacityProperty, null);
+            w.Opacity = 1.0;
+        };
+        w.MouseLeave += (_, _) => timer.Start();
+
         timer.Start();
     }
 
-    private static Window BuildToastWindow(string title, string message, ToastKind kind)
+    private static Window BuildToastWindow(string title, string message, ToastKind kind, ToastCopyAction? copy)
     {
         var accent = kind switch
         {
@@ -155,8 +168,83 @@ public sealed class ToastService : IToastService
             Margin = new Thickness(0, 3, 0, 0),
         });
 
+        if (copy != null)
+            stack.Children.Add(BuildCopyButton(copy));
+
         border.Child = stack;
         window.Content = border;
         return window;
+    }
+
+    /// <summary>
+    /// A self-styled, clipboard-writing button matching the toast's dark theme. Implemented as a
+    /// clickable <see cref="Border"/> rather than a <see cref="Button"/> to avoid the system chrome
+    /// (light background, blue hover) that fights the toast palette. The host toast is intentionally
+    /// non-activating/non-focusable, so keyboard access isn't a concern here — mouse input still
+    /// routes to child elements regardless of window activation.
+    /// </summary>
+    private static UIElement BuildCopyButton(ToastCopyAction copy)
+    {
+        var idleBg = new SolidColorBrush(Color.FromArgb(38, 255, 255, 255));
+        var hoverBg = new SolidColorBrush(Color.FromArgb(72, 255, 255, 255));
+        var fg = new SolidColorBrush(Color.FromRgb(225, 225, 225));
+
+        var glyph = new TextBlock
+        {
+            // Segoe MDL2 Assets "Copy" glyph — shipped on Win10/11.
+            Text = "\uE8C8",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 11,
+            Foreground = fg,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var label = new TextBlock
+        {
+            Text = copy.Label,
+            FontSize = 11.5,
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = fg,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(5, 0, 0, 0),
+        };
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(glyph);
+        content.Children.Add(label);
+
+        var button = new Border
+        {
+            Child = content,
+            Background = idleBg,
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(8, 3, 8, 3),
+            Margin = new Thickness(0, 9, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Cursor = Cursors.Hand,
+        };
+
+        button.MouseEnter += (_, _) => button.Background = hoverBg;
+        button.MouseLeave += (_, _) => button.Background = idleBg;
+        button.MouseLeftButtonUp += (_, _) =>
+        {
+            try
+            {
+                // copy: true flushes the data so it survives once the toast (and its window) closes.
+                Clipboard.SetDataObject(copy.Text, true);
+                label.Text = copy.CopiedLabel;
+
+                // Revert the caption so a lingering toast can be copied again with clear feedback.
+                var revert = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+                revert.Tick += (_, _) => { revert.Stop(); label.Text = copy.Label; };
+                revert.Start();
+            }
+            catch
+            {
+                // Clipboard can be momentarily locked by another process. Best-effort: the error is
+                // still on screen and in the log, so a failed copy is non-fatal.
+            }
+        };
+
+        return button;
     }
 }

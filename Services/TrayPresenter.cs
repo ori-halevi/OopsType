@@ -199,7 +199,13 @@ public sealed class TrayPresenter : ITrayPresenter
         // dropped because Win10/11 routes ShowBalloonTip through Action Center, which silences
         // it under common defaults — making the notification unreliable for debugging.
         var text = string.IsNullOrEmpty(n.Message) ? n.Source : $"{n.Source}\n{n.Message}";
-        _toasts.Show(_localization.T("Tray_ErrorToast_Title"), Truncate(text, 400), ToastKind.Error);
+        // Copy the *full* error (untruncated) so a long message that the toast clips on screen is
+        // still recoverable from the clipboard for a bug report.
+        var copy = new ToastCopyAction(
+            text,
+            _localization.T("Toast_Copy"),
+            _localization.T("Toast_Copied"));
+        _toasts.Show(_localization.T("Tray_ErrorToast_Title"), Truncate(text, 400), ToastKind.Error, copy);
     }
 
     private static string Truncate(string s, int max) =>

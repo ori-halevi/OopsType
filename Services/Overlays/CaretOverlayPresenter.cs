@@ -18,12 +18,14 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     // keyboard activity.
     private static readonly TimeSpan FollowInterval = TimeSpan.FromMilliseconds(120);
 
-    // Fallback label height in DIPs used before the overlay has measured itself once.
+    // Fallback label height/width in DIPs used before the overlay has measured itself once.
     private const double DefaultLabelHeightDip = 18;
+    private const double DefaultLabelWidthDip = 28;
 
     private readonly ISettingsService _settings;
     private readonly ICaretLocationService _caret;
     private readonly IKeyboardActivityService _activity;
+    private readonly IKeyboardLayoutService _layout;
     private readonly IErrorReporter _reporter;
     private readonly Func<CaretLabelViewModel> _vmFactory;
     private readonly Func<CaretLabelOverlay> _viewFactory;
@@ -39,6 +41,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         ISettingsService settings,
         ICaretLocationService caret,
         IKeyboardActivityService activity,
+        IKeyboardLayoutService layout,
         IErrorReporter reporter,
         Func<CaretLabelViewModel> vmFactory,
         Func<CaretLabelOverlay> viewFactory)
@@ -46,6 +49,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _settings = settings;
         _caret = caret;
         _activity = activity;
+        _layout = layout;
         _reporter = reporter;
         _vmFactory = vmFactory;
         _viewFactory = viewFactory;
@@ -139,16 +143,45 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
 
         var settings = _settings.Current.CaretLabel;
         var labelHeight = _overlay.ActualHeight > 0 ? _overlay.ActualHeight : DefaultLabelHeightDip;
+        var labelWidth = _overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip;
+        var caret = info.ScreenRect;
 
-        // Anchor: top of caret minus the chip's height — i.e. just above the caret line. User
-        // offsets (OffsetX/Y) are layered on top so the chip can sit, e.g., to the side instead.
-        var x = info.ScreenRect.X + settings.OffsetX;
-        var y = info.ScreenRect.Y - labelHeight + settings.OffsetY;
+        // The chip is anchored by its CENTRE: offset (0,0) centres it on the caret, and the user
+        // offsets move that centre — X positive-right, Y positive-up (subtracted). Horizontal "auto"
+        // mode is the exception: it parks the chip beside the caret by language instead (see ComputeX).
+        var x = ComputeX(caret, settings, labelWidth);
+        var y = caret.Y + caret.Height / 2 - labelHeight / 2 - settings.OffsetY;
 
         _overlay.PositionInScreenPixels(x, y);
         if (_overlay.Visibility != Visibility.Visible)
             _overlay.Visibility = Visibility.Visible;
         _overlay.EnsureTopmost();
+    }
+
+    /// <summary>
+    /// Horizontal anchor for the chip's left edge.
+    ///   "auto" — choose the side from the active keyboard language so the chip stays clear of the
+    ///            text: an RTL language (Hebrew/Arabic) puts it to the LEFT of the caret, an LTR
+    ///            language to the RIGHT, separated by the configured (non-negative) distance. This
+    ///            lets the user switch languages without the chip ever covering what they type.
+    ///   "offset" — the chip is centred on the caret, then shifted by the signed OffsetX.
+    /// </summary>
+    private double ComputeX(Rect caret, Models.CaretLabelSettings settings, double labelWidth)
+    {
+        if (!string.Equals(settings.HorizontalMode, "auto", StringComparison.OrdinalIgnoreCase))
+            // Centre the chip on the caret, then apply the signed offset (positive moves it right).
+            return caret.X + caret.Width / 2 - labelWidth / 2 + settings.OffsetX;
+
+        var distance = Math.Max(0, settings.HorizontalDistance);
+        if (_layout.Current.IsRtl)
+        {
+            // Chip to the LEFT of the caret: its right edge sits `distance` left of the caret, so
+            // its left edge is a further label-width to the left.
+            return caret.X - distance - labelWidth;
+        }
+
+        // LTR: chip to the RIGHT of the caret, starting `distance` past the caret's right edge.
+        return caret.X + caret.Width + distance;
     }
 
     public void Dispose()

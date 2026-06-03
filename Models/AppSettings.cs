@@ -14,15 +14,40 @@ public sealed class AppSettings
 public sealed class CaretLabelSettings
 {
     public bool Enabled { get; set; } = false;
-    /// <summary>Horizontal offset from caret's top-left, in DIPs.</summary>
+
+    /// <summary>
+    /// How the chip's HORIZONTAL position is decided:
+    ///   "offset" (default) — a fixed signed <see cref="OffsetX"/> from the caret (legacy behavior).
+    ///   "auto" — pick the side from the active keyboard language so the chip never covers the text:
+    ///            RTL language → left of the caret, LTR language → right of it, separated by
+    ///            <see cref="HorizontalDistance"/>. Lets the user switch languages without the chip
+    ///            ever sitting on top of what they're typing.
+    /// </summary>
+    public string HorizontalMode { get; set; } = "offset";
+
+    /// <summary>Gap in DIPs between the caret and the chip when <see cref="HorizontalMode"/> is
+    /// "auto". Non-negative; the side (left/right) is chosen from the language direction.</summary>
+    public int HorizontalDistance { get; set; } = 8;
+
+    /// <summary>Horizontal offset of the chip's CENTRE from the caret, in DIPs. 0 centres the chip on
+    /// the caret; positive moves it right, negative left. Used when <see cref="HorizontalMode"/> is "offset".</summary>
     public int OffsetX { get; set; } = 0;
-    /// <summary>Vertical offset from caret-top minus label-height (so 0 = just above the caret line).</summary>
+    /// <summary>Vertical offset of the chip's CENTRE from the caret, in DIPs. 0 centres the chip on the
+    /// caret line; positive moves it UP, negative DOWN.</summary>
     public int OffsetY { get; set; } = 0;
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
 
+    /// <summary>Label text weight — one of Light/Regular/Medium/SemiBold/Bold (case-insensitive).
+    /// Default Bold. Unrecognised values fall back to Bold (see LabelStyleBrushes.ParseFontWeight).</summary>
+    public string FontWeight { get; set; } = "Bold";
+
     /// <summary>0.0 = invisible, 1.0 = fully opaque. Applied to the whole chip (background, text, border).</summary>
     public double Opacity { get; set; } = 1.0;
+
+    /// <summary>0.0 = invisible text (only the empty chip remains), 1.0 = fully opaque. Applied to the
+    /// label TEXT only, multiplying on top of the chip-wide <see cref="Opacity"/>.</summary>
+    public double TextOpacity { get; set; } = 1.0;
 
     /// <summary>Per-language chip appearance. Key is the two-letter layout code (lowercase, e.g. "he").
     /// A language with no entry falls back to the built-in dark chip with white text and no border.</summary>
@@ -32,14 +57,25 @@ public sealed class CaretLabelSettings
 public sealed class MouseLabelSettings
 {
     public bool Enabled { get; set; } = true;
-    /// <summary>Offset from the cursor hotspot, in DIPs. Default 12,12 = bottom-right of cursor.</summary>
-    public int OffsetX { get; set; } = 12;
-    public int OffsetY { get; set; } = 12;
+    /// <summary>Offset from the cursor hotspot, in DIPs. Horizontally the chip is CENTRED on the tip
+    /// (X positive-right); vertically its TOP edge sits at the tip when OffsetY is 0, so the chip
+    /// hangs below the cursor like a tooltip (Y positive-up). The default 14,0 leaves the top at the
+    /// tip and nudges the chip just right of centre.</summary>
+    public int OffsetX { get; set; } = 14;
+    public int OffsetY { get; set; } = 0;
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
 
+    /// <summary>Label text weight — one of Light/Regular/Medium/SemiBold/Bold (case-insensitive).
+    /// Default Bold. Unrecognised values fall back to Bold (see LabelStyleBrushes.ParseFontWeight).</summary>
+    public string FontWeight { get; set; } = "Bold";
+
     /// <summary>0.0 = invisible, 1.0 = fully opaque. Applied to the whole chip (background, text, border).</summary>
     public double Opacity { get; set; } = 1.0;
+
+    /// <summary>0.0 = invisible text (only the empty chip remains), 1.0 = fully opaque. Applied to the
+    /// label TEXT only, multiplying on top of the chip-wide <see cref="Opacity"/>.</summary>
+    public double TextOpacity { get; set; } = 1.0;
 
     /// <summary>Per-language chip appearance. Key is the two-letter layout code (lowercase, e.g. "he").
     /// A language with no entry falls back to the built-in dark chip with white text and no border.</summary>

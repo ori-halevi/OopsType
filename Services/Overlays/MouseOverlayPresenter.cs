@@ -53,6 +53,10 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
     private static readonly TimeSpan CursorVisibilityPollInterval = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan CursorVisibilityPollDuration = TimeSpan.FromSeconds(5);
 
+    // Fallback chip width in DIPs used before the overlay has measured itself once. Only matters for
+    // the first frame or two; the real ActualWidth takes over as soon as the chip renders.
+    private const double DefaultLabelWidthDip = 28;
+
     private readonly ISettingsService _settings;
     private readonly IErrorReporter _reporter;
     private readonly Func<MouseLabelViewModel> _vmFactory;
@@ -202,7 +206,14 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         if (!NativeMethods.GetCursorPos(out var p)) return;
 
         var settings = _settings.Current.MouseLabel;
-        _overlay.PositionInScreenPixels(p.X + settings.OffsetX, p.Y + settings.OffsetY);
+        var labelWidth = _overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip;
+
+        // Horizontally the chip is CENTRED on the cursor hotspot; vertically its TOP edge sits at the
+        // hotspot when OffsetY is 0, so the chip hangs below the tip like a tooltip. Offsets move it
+        // from there — X positive-right, Y positive-up (subtracted).
+        _overlay.PositionInScreenPixels(
+            p.X - labelWidth / 2 + settings.OffsetX,
+            p.Y - settings.OffsetY);
         if (_overlay.Visibility != Visibility.Visible)
             _overlay.Visibility = Visibility.Visible;
     }

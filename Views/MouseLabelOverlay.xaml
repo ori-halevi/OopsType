@@ -12,6 +12,7 @@
                    Foreground="{Binding Foreground}"
                    FontFamily="{Binding FontFamily}"
                    FontSize="{Binding FontSize}"
-                   FontWeight="SemiBold"/>
+                   FontWeight="{Binding FontWeight}"
+                   Opacity="{Binding TextOpacity}"/>
     </Border>
 </views:OverlayWindowBase>

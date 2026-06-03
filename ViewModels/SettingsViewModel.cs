@@ -95,9 +95,56 @@ public sealed class SettingsViewModel : BindableBase
     public bool CaretEnabled { get => _caretEnabled; set => SetProperty(ref _caretEnabled, value); }
 
     private int _caretOffsetX;
-    public int CaretOffsetX { get => _caretOffsetX; set => SetProperty(ref _caretOffsetX, ClampOffset(value)); }
+    public int CaretOffsetX
+    {
+        get => _caretOffsetX;
+        set { if (SetProperty(ref _caretOffsetX, ClampOffset(value))) RaisePropertyChanged(nameof(CaretPreviewOffsetX)); }
+    }
     private int _caretOffsetY;
-    public int CaretOffsetY { get => _caretOffsetY; set => SetProperty(ref _caretOffsetY, ClampOffset(value)); }
+    public int CaretOffsetY
+    {
+        get => _caretOffsetY;
+        set { if (SetProperty(ref _caretOffsetY, ClampOffset(value))) RaisePropertyChanged(nameof(CaretPreviewOffsetY)); }
+    }
+
+    // Horizontal positioning mode for the caret chip:
+    //   false → fixed signed OffsetX (legacy);  true → auto side-by-language with HorizontalDistance.
+    private bool _caretHorizontalAuto;
+    public bool CaretHorizontalAuto
+    {
+        get => _caretHorizontalAuto;
+        set
+        {
+            if (SetProperty(ref _caretHorizontalAuto, value))
+            {
+                RaisePropertyChanged(nameof(CaretHorizontalManual));
+                RaisePropertyChanged(nameof(CaretPreviewOffsetX));
+            }
+        }
+    }
+
+    /// <summary>Inverse of <see cref="CaretHorizontalAuto"/>. Bound by the "manual offset" radio so
+    /// the two options stay mutually exclusive without needing an inverse-bool converter.</summary>
+    public bool CaretHorizontalManual
+    {
+        get => !_caretHorizontalAuto;
+        set { if (value) CaretHorizontalAuto = false; }
+    }
+
+    private int _caretHorizontalDistance;
+    public int CaretHorizontalDistance
+    {
+        get => _caretHorizontalDistance;
+        set { if (SetProperty(ref _caretHorizontalDistance, ClampDistance(value))) RaisePropertyChanged(nameof(CaretPreviewOffsetX)); }
+    }
+
+    /// <summary>Preview-only horizontal translation: the signed offset in manual mode, or the
+    /// (rightward) auto distance — the settings mock document is pinned LTR, so it shows the LTR side.</summary>
+    public double CaretPreviewOffsetX => _caretHorizontalAuto ? _caretHorizontalDistance : _caretOffsetX;
+
+    /// <summary>Preview-only vertical translation. OffsetY is positive-up (positive lifts the chip),
+    /// but the preview Canvas is positive-down, so the sign is negated to match the live overlay.</summary>
+    public double CaretPreviewOffsetY => -_caretOffsetY;
     private string _caretFont;
     public string CaretFont { get => _caretFont; set => SetProperty(ref _caretFont, value); }
     private int _caretSize;
@@ -108,6 +155,18 @@ public sealed class SettingsViewModel : BindableBase
         get => _caretOpacity;
         set { if (SetProperty(ref _caretOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(CaretPreviewOpacity)); }
     }
+    private string _caretFontWeight;
+    public string CaretFontWeight
+    {
+        get => _caretFontWeight;
+        set { if (SetProperty(ref _caretFontWeight, value)) RaisePropertyChanged(nameof(CaretPreviewFontWeight)); }
+    }
+    private double _caretTextOpacity;
+    public double CaretTextOpacity
+    {
+        get => _caretTextOpacity;
+        set { if (SetProperty(ref _caretTextOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(CaretPreviewTextOpacity)); }
+    }
 
     // ---- Mouse label (follows mouse cursor) ----
     private bool _mouseEnabled;
@@ -115,7 +174,15 @@ public sealed class SettingsViewModel : BindableBase
     private int _mouseOffsetX;
     public int MouseOffsetX { get => _mouseOffsetX; set => SetProperty(ref _mouseOffsetX, ClampOffset(value)); }
     private int _mouseOffsetY;
-    public int MouseOffsetY { get => _mouseOffsetY; set => SetProperty(ref _mouseOffsetY, ClampOffset(value)); }
+    public int MouseOffsetY
+    {
+        get => _mouseOffsetY;
+        set { if (SetProperty(ref _mouseOffsetY, ClampOffset(value))) RaisePropertyChanged(nameof(MousePreviewOffsetY)); }
+    }
+
+    /// <summary>Preview-only vertical translation. OffsetY is positive-up; the preview Canvas is
+    /// positive-down, so the sign is negated to match the live overlay.</summary>
+    public double MousePreviewOffsetY => -_mouseOffsetY;
     private string _mouseFont;
     public string MouseFont { get => _mouseFont; set => SetProperty(ref _mouseFont, value); }
     private int _mouseSize;
@@ -126,8 +193,25 @@ public sealed class SettingsViewModel : BindableBase
         get => _mouseOpacity;
         set { if (SetProperty(ref _mouseOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(MousePreviewOpacity)); }
     }
+    private string _mouseFontWeight;
+    public string MouseFontWeight
+    {
+        get => _mouseFontWeight;
+        set { if (SetProperty(ref _mouseFontWeight, value)) RaisePropertyChanged(nameof(MousePreviewFontWeight)); }
+    }
+    private double _mouseTextOpacity;
+    public double MouseTextOpacity
+    {
+        get => _mouseTextOpacity;
+        set { if (SetProperty(ref _mouseTextOpacity, Math.Clamp(value, 0.0, 1.0))) RaisePropertyChanged(nameof(MousePreviewTextOpacity)); }
+    }
+
+    /// <summary>Font-weight names offered in both label typography sections (Light…Bold). Shared
+    /// source so the two combos can never drift apart.</summary>
+    public IReadOnlyList<string> FontWeightOptions { get; } = LabelStyleBrushes.FontWeightNames;
 
     private static int ClampOffset(int value) => Math.Clamp(value, -MaxOffsetPx, MaxOffsetPx);
+    private static int ClampDistance(int value) => Math.Clamp(value, 0, MaxOffsetPx);
     private static int ClampFontSize(int value) => value <= 0 ? value : Math.Clamp(value, MinFontSize, MaxFontSize);
 
     public string[] MouseTrackingModes { get; } = new[] { "economy", "max-smoothness" };
@@ -254,6 +338,8 @@ public sealed class SettingsViewModel : BindableBase
     public Brush CaretPreviewBorderBrush => PreviewBorderBrushOf(CaretColorRows);
     public Thickness CaretPreviewBorderThickness => PreviewBorderThicknessOf(CaretColorRows);
     public double CaretPreviewOpacity => _caretOpacity;
+    public FontWeight CaretPreviewFontWeight => LabelStyleBrushes.ParseFontWeight(_caretFontWeight);
+    public double CaretPreviewTextOpacity => _caretTextOpacity;
 
     public string MousePreviewCode => PreviewCodeOf(MouseColorRows);
     public Brush MousePreviewBackground => PreviewBrushOf(MouseColorRows, r => r.Background, PreviewDefaultBackground);
@@ -261,6 +347,8 @@ public sealed class SettingsViewModel : BindableBase
     public Brush MousePreviewBorderBrush => PreviewBorderBrushOf(MouseColorRows);
     public Thickness MousePreviewBorderThickness => PreviewBorderThicknessOf(MouseColorRows);
     public double MousePreviewOpacity => _mouseOpacity;
+    public FontWeight MousePreviewFontWeight => LabelStyleBrushes.ParseFontWeight(_mouseFontWeight);
+    public double MousePreviewTextOpacity => _mouseTextOpacity;
 
     private static Brush PreviewBorderBrushOf(ObservableCollection<LabelStyleRow> rows)
     {
@@ -368,7 +456,11 @@ public sealed class SettingsViewModel : BindableBase
 
     // ---- Strip ----
     private bool _stripEnabled;
-    public bool StripEnabled { get => _stripEnabled; set => SetProperty(ref _stripEnabled, value); }
+    public bool StripEnabled
+    {
+        get => _stripEnabled;
+        set { if (SetProperty(ref _stripEnabled, value)) RaiseStripPreview(); }
+    }
 
     public string[] StripThicknesses { get; } = new[] { "small", "medium", "large", "full" };
     private string _stripThickness;
@@ -422,7 +514,30 @@ public sealed class SettingsViewModel : BindableBase
 
     public string[] StripPlacements { get; } = new[] { "front", "behind" };
     private string _stripPlacement;
-    public string StripPlacement { get => _stripPlacement; set => SetProperty(ref _stripPlacement, value); }
+    public string StripPlacement
+    {
+        get => _stripPlacement;
+        set { if (SetProperty(ref _stripPlacement, value)) RaiseStripPreview(); }
+    }
+
+    /// <summary>True when the strip is configured to sit BEHIND the taskbar (vs. in front). In the
+    /// live overlay this relies on the Win11 translucent taskbar letting the color bleed through.</summary>
+    public bool StripIsBehind => string.Equals(_stripPlacement, "behind", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True when the preview should simulate the strip sitting behind a translucent taskbar
+    /// (enabled AND placed behind). Drives the behind swatch, the taskbar's translucency and the
+    /// "assumes Transparency effects on" note so they stay in lockstep.</summary>
+    public bool StripBehindSimulated => _stripEnabled && StripIsBehind;
+
+    /// <summary>True when the preview should draw the strip in front of the taskbar (enabled AND not behind).</summary>
+    public bool StripFrontSimulated => _stripEnabled && !StripIsBehind;
+
+    private void RaiseStripPreview()
+    {
+        RaisePropertyChanged(nameof(StripIsBehind));
+        RaisePropertyChanged(nameof(StripBehindSimulated));
+        RaisePropertyChanged(nameof(StripFrontSimulated));
+    }
 
     public bool StripVerticalPositionEnabled =>
         !string.Equals(_stripThickness, "full", StringComparison.OrdinalIgnoreCase);
@@ -559,6 +674,13 @@ public sealed class SettingsViewModel : BindableBase
 
     private void MarkDirty() { if (_initialized && !_isDirty) IsDirty = true; }
 
+    /// <summary>Marks the VM dirty in response to a raw field edit from the view. The Wpf.Ui NumberBox
+    /// only pushes its <c>Value</c> to the binding on Enter/focus-loss, but a disabled Save button can't
+    /// take focus — so without this, typing in a field would never enable Save. The view routes every
+    /// text edit here so Save lights up immediately; the actual value still commits on focus change
+    /// (which clicking the now-enabled Save triggers).</summary>
+    public void NotifyFieldEdited() => MarkDirty();
+
     /// <summary>
     /// Clears the dirty flag. The view calls this once after Loaded so that any binding-init
     /// noise (editable ComboBox bouncing, NumberBox round-tripping) doesn't mark the VM dirty
@@ -575,21 +697,32 @@ public sealed class SettingsViewModel : BindableBase
             case nameof(StripVerticalPositionEnabled):
             case nameof(StripThicknessPixels):
             case nameof(StripFillsTaskbar):
+            case nameof(StripIsBehind):
+            case nameof(StripBehindSimulated):
+            case nameof(StripFrontSimulated):
             case nameof(EffectiveStripOpacity):
             case nameof(PreviewCode):
             case nameof(PreviewColor):
+            case nameof(CaretHorizontalManual):
+            case nameof(CaretPreviewOffsetX):
+            case nameof(CaretPreviewOffsetY):
             case nameof(CaretPreviewCode):
             case nameof(CaretPreviewBackground):
             case nameof(CaretPreviewForeground):
             case nameof(CaretPreviewBorderBrush):
             case nameof(CaretPreviewBorderThickness):
             case nameof(CaretPreviewOpacity):
+            case nameof(CaretPreviewFontWeight):
+            case nameof(CaretPreviewTextOpacity):
+            case nameof(MousePreviewOffsetY):
             case nameof(MousePreviewCode):
             case nameof(MousePreviewBackground):
             case nameof(MousePreviewForeground):
             case nameof(MousePreviewBorderBrush):
             case nameof(MousePreviewBorderThickness):
             case nameof(MousePreviewOpacity):
+            case nameof(MousePreviewFontWeight):
+            case nameof(MousePreviewTextOpacity):
                 return;
         }
         MarkDirty();
@@ -636,11 +769,15 @@ public sealed class SettingsViewModel : BindableBase
         _selectedLanguage = ResolveSelectedLanguage(s.General.Language);
 
         _caretEnabled = s.CaretLabel.Enabled;
+        _caretHorizontalAuto = string.Equals(s.CaretLabel.HorizontalMode, "auto", StringComparison.OrdinalIgnoreCase);
+        _caretHorizontalDistance = ClampDistance(s.CaretLabel.HorizontalDistance);
         _caretOffsetX = s.CaretLabel.OffsetX;
         _caretOffsetY = s.CaretLabel.OffsetY;
         _caretFont = s.CaretLabel.Font;
         _caretSize = s.CaretLabel.Size;
         _caretOpacity = Math.Clamp(s.CaretLabel.Opacity, 0.0, 1.0);
+        _caretFontWeight = LabelStyleBrushes.NormalizeFontWeightName(s.CaretLabel.FontWeight);
+        _caretTextOpacity = Math.Clamp(s.CaretLabel.TextOpacity, 0.0, 1.0);
 
         _mouseEnabled = s.MouseLabel.Enabled;
         _mouseOffsetX = s.MouseLabel.OffsetX;
@@ -648,6 +785,8 @@ public sealed class SettingsViewModel : BindableBase
         _mouseFont = s.MouseLabel.Font;
         _mouseSize = s.MouseLabel.Size;
         _mouseOpacity = Math.Clamp(s.MouseLabel.Opacity, 0.0, 1.0);
+        _mouseFontWeight = LabelStyleBrushes.NormalizeFontWeightName(s.MouseLabel.FontWeight);
+        _mouseTextOpacity = Math.Clamp(s.MouseLabel.TextOpacity, 0.0, 1.0);
         _mouseTrackingMode = NormalizeTrackingMode(s.MouseLabel.TrackingMode);
 
         ReloadLabelRows(CaretColorRows, s.CaretLabel.Colors);
@@ -707,11 +846,15 @@ public sealed class SettingsViewModel : BindableBase
     {
         var s = _settings.Current;
         s.CaretLabel.Enabled = CaretEnabled;
+        s.CaretLabel.HorizontalMode = CaretHorizontalAuto ? "auto" : "offset";
+        s.CaretLabel.HorizontalDistance = ClampDistance(CaretHorizontalDistance);
         s.CaretLabel.OffsetX = CaretOffsetX;
         s.CaretLabel.OffsetY = CaretOffsetY;
         s.CaretLabel.Font = CaretFont;
         s.CaretLabel.Size = CaretSize;
         s.CaretLabel.Opacity = Math.Clamp(CaretOpacity, 0.0, 1.0);
+        s.CaretLabel.FontWeight = LabelStyleBrushes.NormalizeFontWeightName(CaretFontWeight);
+        s.CaretLabel.TextOpacity = Math.Clamp(CaretTextOpacity, 0.0, 1.0);
         ApplyLabelRows(CaretColorRows, s.CaretLabel.Colors);
 
         s.MouseLabel.Enabled = MouseEnabled;
@@ -720,6 +863,8 @@ public sealed class SettingsViewModel : BindableBase
         s.MouseLabel.Font = MouseFont;
         s.MouseLabel.Size = MouseSize;
         s.MouseLabel.Opacity = Math.Clamp(MouseOpacity, 0.0, 1.0);
+        s.MouseLabel.FontWeight = LabelStyleBrushes.NormalizeFontWeightName(MouseFontWeight);
+        s.MouseLabel.TextOpacity = Math.Clamp(MouseTextOpacity, 0.0, 1.0);
         s.MouseLabel.TrackingMode = NormalizeTrackingMode(MouseTrackingMode);
         ApplyLabelRows(MouseColorRows, s.MouseLabel.Colors);
 

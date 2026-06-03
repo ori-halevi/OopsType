@@ -10,6 +10,11 @@ namespace OopsType.Services;
 
 public sealed class CaretLocationService : ICaretLocationService
 {
+    // Our own process id. The caret label is meant for OTHER apps; showing it over our own windows
+    // (e.g. the Settings window's offset NumberBoxes, which expose a text caret) is just confusing
+    // noise, so we never anchor to a caret that belongs to us.
+    private static readonly uint OwnProcessId = (uint)Environment.ProcessId;
+
     // Window classes that indicate a popup/menu/tooltip — never show the label over these.
     private static readonly HashSet<string> SuppressedClasses = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -35,7 +40,8 @@ public sealed class CaretLocationService : ICaretLocationService
         if (SuppressedClasses.Contains(cls)) return None();
 
         // Some popups (context menus) take focus without becoming foreground — check GUI thread info menu owner too.
-        var tid = NativeMethods.GetWindowThreadProcessId(hwnd, IntPtr.Zero);
+        var tid = NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+        if (pid == OwnProcessId) return None();
         var info = new NativeMethods.GUITHREADINFO
         {
             cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.GUITHREADINFO>()
@@ -125,37 +131,93 @@ public sealed class CaretLocationService : ICaretLocationService
 
     /// <summary>
     /// Recovers a caret rect from a collapsed (zero-length) selection by expanding a clone to one
-    /// character. Tries the character *after* the caret first; if the caret sits at end-of-text
-    /// (nothing after it) we expand to the character *before* and anchor to that one's right edge.
-    /// The returned rect is collapsed to the caret edge so the chip sits exactly at the caret, not
-    /// spread across the measured glyph.
+    /// character. Tries the character *after* the caret first (anchor its LEFT edge); if the caret
+    /// sits at end-of-text we walk one character *back* and anchor that one's RIGHT edge. Either
+    /// candidate is rejected unless it lands on the caret's own line — otherwise an empty line
+    /// (just pressed Enter) makes the backward walk cross the line break and the chip jumps up to
+    /// the end of the previous line. When no character on the line can be measured (a truly blank
+    /// line) we fall back to the line rect's leading edge so the chip still tracks the new line.
+    /// The returned rect is collapsed to the caret edge so the chip sits exactly at the caret.
     /// </summary>
     private static bool TryRectFromCollapsedCaret(TextPatternRange selection, out Rect rect)
     {
         rect = default;
 
-        // Character after the caret → anchor to its LEFT edge (where the caret is).
+        // Reference rect for the caret's *own* line. Lets us reject a character rect that belongs
+        // to a different line (the cross-line jump described above). Optional — if the provider
+        // doesn't support the Line unit we simply proceed without the guard.
+        Rect? lineRect = TryLineRect(selection);
+
+        // Character after the caret → anchor to its LEFT edge (where the caret sits).
         var forward = selection.Clone();
         forward.ExpandToEnclosingUnit(TextUnit.Character);
-        if (TryRectFromRange(forward, out var fr))
+        if (TryRawRect(forward, out var fr) && OnLine(fr, lineRect))
         {
-            rect = new Rect(fr.X, fr.Y, 1, fr.Height);
+            rect = new Rect(fr.X, fr.Y, 1, Math.Max(4, fr.Height));
             return true;
         }
 
-        // End of text: walk one character back, anchor to its RIGHT edge.
+        // Caret at end of a line's text: walk one character back, anchor its RIGHT edge — but only
+        // if it's still on the caret's line (guards the empty-line cross-over).
         var backward = selection.Clone();
         if (backward.Move(TextUnit.Character, -1) != 0)
         {
             backward.ExpandToEnclosingUnit(TextUnit.Character);
-            if (TryRectFromRange(backward, out var br))
+            if (TryRawRect(backward, out var br) && OnLine(br, lineRect))
             {
-                rect = new Rect(br.X + br.Width, br.Y, 1, br.Height);
+                rect = new Rect(br.X + br.Width, br.Y, 1, Math.Max(4, br.Height));
                 return true;
             }
         }
 
+        // Blank line with nothing to measure: anchor to the line's leading edge.
+        if (lineRect is { } lr)
+        {
+            rect = new Rect(lr.X, lr.Y, 1, Math.Max(4, lr.Height));
+            return true;
+        }
+
         return false;
+    }
+
+    /// <summary>Bounding rect of the caret's line, or null when the Line unit isn't supported.</summary>
+    private static Rect? TryLineRect(TextPatternRange selection)
+    {
+        try
+        {
+            var line = selection.Clone();
+            line.ExpandToEnclosingUnit(TextUnit.Line);
+            return TryRawRect(line, out var lr) ? lr : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>First bounding rect of a range, allowing zero width (a degenerate caret/blank-line
+    /// rect) but rejecting empty/infinite ones. Unlike <see cref="TryRectFromRange"/> it does not
+    /// require a positive width, so it can measure the newline/blank-line position.</summary>
+    private static bool TryRawRect(TextPatternRange range, out Rect rect)
+    {
+        rect = default;
+        var ranges = range.GetBoundingRectangles();
+        if (ranges == null || ranges.Length == 0) return false;
+
+        var r = ranges[0];
+        if (r.Height <= 0 || double.IsInfinity(r.X) || double.IsInfinity(r.Y)) return false;
+
+        rect = new Rect(r.X, r.Y, Math.Max(0, r.Width), r.Height);
+        return true;
+    }
+
+    /// <summary>True when <paramref name="r"/>'s vertical midpoint falls within the caret line's
+    /// span (or when there's no line reference to test against — fail-open).</summary>
+    private static bool OnLine(Rect r, Rect? lineRect)
+    {
+        if (lineRect is not { } lr) return true;
+        var mid = r.Y + r.Height / 2;
+        return mid >= lr.Y - 1 && mid <= lr.Y + lr.Height + 1;
     }
 
     private static CaretInfo None() => new(false, default, CaretSource.None);

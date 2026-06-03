@@ -6,6 +6,7 @@
         xmlns:loc="clr-namespace:OopsType.Markup"
         xmlns:ctrl="clr-namespace:OopsType.Views.Controls"
         xmlns:conv="clr-namespace:OopsType.Converters"
+        xmlns:behaviors="clr-namespace:OopsType.Behaviors"
         Title="{loc:T Window_Title}"
         Icon="pack://application:,,,/Assets/logo.ico"
         Width="980" Height="680"
@@ -120,14 +121,43 @@
 
         <!-- Page visibility: collapse a page when its tag != selected nav's tag -->
         <Style x:Key="PageRoot" TargetType="ScrollViewer">
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <!-- Visible (not Auto) so the scrollbar is always present as an explicit "this scrolls"
+                 cue. The thumb shrinking below full height is the clearest signal there's more below,
+                 and keeping it on every page also stops content from shifting width between a page
+                 that scrolls and one that doesn't. -->
+            <Setter Property="VerticalScrollBarVisibility" Value="Visible"/>
             <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="Padding" Value="32,24,32,24"/>
             <Setter Property="Visibility" Value="Collapsed"/>
+            <!-- Soft fade at the bottom/top edge so a page that scrolls past the fold reads as
+                 having more content, instead of looking like the visible cards are all there is. -->
+            <Setter Property="behaviors:ScrollViewerFade.Enabled" Value="True"/>
         </Style>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:LanguageNameConverter x:Key="LangName"/>
+        <!-- Centres an auto-sized preview chip on its anchor: TranslateTransform = -ActualSize/2. -->
+        <conv:ScaleConverter x:Key="HalfNegate"/>
+        <!-- Caret preview X translate: centred (manual) vs left-edge beside-the-caret (auto). -->
+        <conv:CaretPreviewXConverter x:Key="CaretPreviewX"/>
+
+        <!-- Shared geometry for the two taskbar-strip preview swatches (one drawn behind the
+             taskbar, one in front, toggled by placement). Background + Visibility are set per copy;
+             this carries the thickness, opacity and top/bottom/stretch positioning common to both. -->
+        <Style x:Key="StripPreviewSwatch" TargetType="Border">
+            <Setter Property="Grid.Row" Value="1"/>
+            <Setter Property="Opacity" Value="{Binding EffectiveStripOpacity}"/>
+            <Setter Property="Height" Value="{Binding StripThicknessPixels}"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StripVerticalPosition}" Value="bottom">
+                    <Setter Property="VerticalAlignment" Value="Bottom"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StripFillsTaskbar}" Value="True">
+                    <Setter Property="VerticalAlignment" Value="Stretch"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- ===== Per-language color row templates =====
              The caret/mouse/strip color tables are card lists (one row per language) rather than
@@ -189,7 +219,9 @@
                                       Minimum="0" Maximum="20" SmallChange="1"/>
                     </StackPanel>
 
-                    <!-- Live chip preview -->
+                    <!-- Live chip preview. Background/BorderBrush/Foreground are hex strings on the
+                         row (a DataContext binding), where WPF's implicit string→Brush conversion
+                         works reliably — so no converter is needed here. -->
                     <Border Grid.Column="4" Margin="12,0,0,0" VerticalAlignment="Center"
                             CornerRadius="3" MinWidth="46" Height="26" Padding="6,1"
                             Background="{Binding Background}"
@@ -376,25 +408,45 @@
                                                    Width="320" Height="2" Fill="{DynamicResource DocLine}"/>
                                         <Rectangle Canvas.Left="0" Canvas.Top="68"
                                                    Width="220" Height="2" Fill="{DynamicResource DocLine}"/>
-                                        <!-- Caret -->
+                                        <!-- Caret (centre at 231,43) -->
                                         <Rectangle x:Name="DemoCaret"
                                                    Canvas.Left="230" Canvas.Top="34"
                                                    Width="2" Height="18" Fill="{DynamicResource DocCaret}"/>
-                                        <!-- Label, offset relative to caret -->
-                                        <Border CornerRadius="3" Padding="4,1"
-                                                Canvas.Left="232" Canvas.Top="34"
+                                        <!-- Label anchored by its CENTRE on the caret centre, then shifted by
+                                             the user offset — mirrors the live overlay. The first translate
+                                             (-ActualSize/2) centres the chip; the second applies the offset. -->
+                                        <Border x:Name="CaretChip" CornerRadius="3" Padding="4,1"
+                                                Canvas.Left="231" Canvas.Top="43"
                                                 Background="{Binding CaretPreviewBackground}"
                                                 BorderBrush="{Binding CaretPreviewBorderBrush}"
                                                 BorderThickness="{Binding CaretPreviewBorderThickness}"
                                                 Opacity="{Binding CaretPreviewOpacity}">
                                             <Border.RenderTransform>
-                                                <TranslateTransform X="{Binding CaretOffsetX}" Y="{Binding CaretOffsetY}"/>
+                                                <TransformGroup>
+                                                    <!-- Centre vertically on the caret (X centring is folded into the
+                                                         mode-aware converter below). The size bindings target the chip
+                                                         by name: RelativeSource Self on a Transform resolves to the
+                                                         Transform (no ActualWidth/Height), silently collapsing the
+                                                         centring to 0 — ElementName reaches the Border instead. -->
+                                                    <TranslateTransform Y="{Binding ActualHeight, ElementName=CaretChip, Converter={StaticResource HalfNegate}}"/>
+                                                    <!-- Apply the user offset: X per horizontal mode, Y positive-up. -->
+                                                    <TranslateTransform Y="{Binding CaretPreviewOffsetY}">
+                                                        <TranslateTransform.X>
+                                                            <MultiBinding Converter="{StaticResource CaretPreviewX}">
+                                                                <Binding Path="CaretHorizontalAuto"/>
+                                                                <Binding Path="ActualWidth" ElementName="CaretChip"/>
+                                                                <Binding Path="CaretPreviewOffsetX"/>
+                                                            </MultiBinding>
+                                                        </TranslateTransform.X>
+                                                    </TranslateTransform>
+                                                </TransformGroup>
                                             </Border.RenderTransform>
                                             <TextBlock Text="{Binding CaretPreviewCode}"
                                                        Foreground="{Binding CaretPreviewForeground}"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="{Binding CaretPreviewFontWeight}"
                                                        FontFamily="{Binding CaretFont}"
-                                                       FontSize="{Binding CaretSize}"/>
+                                                       FontSize="{Binding CaretSize}"
+                                                       Opacity="{Binding CaretPreviewTextOpacity}"/>
                                         </Border>
                                     </Canvas>
                                 </Border>
@@ -422,28 +474,38 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                    <!-- Horizontal-mode selector on its own full-width row. Keeping the radios
+                                         out of the offset columns lets the two NumberBoxes below line up on a
+                                         shared row instead of the X box being pushed down by the radios. -->
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Orientation="Horizontal" Margin="0,0,0,12">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Margin="0,0,12,0"
+                                                   VerticalAlignment="Center" Text="{loc:T Caret_Horizontal}"/>
+                                        <RadioButton GroupName="CaretHorizontal" VerticalAlignment="Center"
+                                                     Content="{loc:T Caret_Horizontal_Manual}"
+                                                     IsChecked="{Binding CaretHorizontalManual, Mode=TwoWay}"
+                                                     ToolTip="{loc:T Caret_Horizontal_Manual_Tooltip}"/>
+                                        <RadioButton GroupName="CaretHorizontal" Margin="14,0,0,0" VerticalAlignment="Center"
+                                                     Content="{loc:T Caret_Horizontal_Auto}"
+                                                     IsChecked="{Binding CaretHorizontalAuto, Mode=TwoWay}"
+                                                     ToolTip="{loc:T Caret_Horizontal_Auto_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <!-- Horizontal value: a signed offset in manual mode, a non-negative
+                                         distance in auto mode (only one NumberBox is visible at a time). -->
+                                    <StackPanel Grid.Row="1" Grid.Column="0">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_OffsetX}"/>
                                         <ui:NumberBox Value="{Binding CaretOffsetX, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
+                                                      Visibility="{Binding CaretHorizontalManual, Converter={StaticResource BoolToVis}}"
                                                       ToolTip="{loc:T Caret_OffsetX_Tooltip}"/>
+                                        <ui:NumberBox Value="{Binding CaretHorizontalDistance, UpdateSourceTrigger=PropertyChanged}" Minimum="0" Maximum="400" SmallChange="1" LargeChange="5"
+                                                      Visibility="{Binding CaretHorizontalAuto, Converter={StaticResource BoolToVis}}"
+                                                      ToolTip="{loc:T Caret_Horizontal_Auto_Tooltip}"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Row="0" Grid.Column="2">
+                                    <StackPanel Grid.Row="1" Grid.Column="2">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_OffsetY}"/>
                                         <ui:NumberBox Value="{Binding CaretOffsetY, UpdateSourceTrigger=PropertyChanged}" Minimum="-200" Maximum="400" SmallChange="1" LargeChange="5"
                                                       ToolTip="{loc:T Caret_OffsetY_Tooltip}"/>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontFamily}"/>
-                                        <ComboBox ItemsSource="{Binding AvailableFonts}"
-                                                  Text="{Binding CaretFont, UpdateSourceTrigger=PropertyChanged}"
-                                                  IsEditable="True"
-                                                  ToolTip="{loc:T Caret_FontFamily_Tooltip}"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontSize}"/>
-                                        <ui:NumberBox Value="{Binding CaretSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
-                                                      ToolTip="{loc:T Caret_FontSize_Tooltip}"/>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
@@ -467,6 +529,75 @@
                                                        Text="{Binding CaretOpacity, StringFormat={}{0:P0}}"
                                                        Foreground="{DynamicResource SubtleText}"/>
                                         </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Typography: font family / size / weight / text opacity in their own section -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel IsEnabled="{Binding CaretEnabled}">
+                                <TextBlock Text="{loc:T Label_TypographyTitle}"
+                                           FontWeight="SemiBold" FontSize="14"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Style="{StaticResource FieldHint}"
+                                           Text="{loc:T Label_TypographyHint}"/>
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontFamily}"/>
+                                        <ComboBox ItemsSource="{Binding AvailableFonts}"
+                                                  Text="{Binding CaretFont, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEditable="True"
+                                                  ToolTip="{loc:T Caret_FontFamily_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Caret_FontSize}"/>
+                                        <ui:NumberBox Value="{Binding CaretSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
+                                                      ToolTip="{loc:T Caret_FontSize_Tooltip}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Label_FontWeight}"/>
+                                        <ComboBox ItemsSource="{Binding FontWeightOptions}"
+                                                  SelectedItem="{Binding CaretFontWeight}"
+                                                  ToolTip="{loc:T Label_FontWeight_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Label_TextOpacity}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="56"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider Grid.Column="0"
+                                                    Minimum="0" Maximum="1"
+                                                    SmallChange="0.05" LargeChange="0.1"
+                                                    TickFrequency="0.1" IsSnapToTickEnabled="False"
+                                                    Value="{Binding CaretTextOpacity}"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="{loc:T Label_TextOpacity_Tooltip}"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Margin="10,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"
+                                                       Text="{Binding CaretTextOpacity, StringFormat={}{0:P0}}"
+                                                       Foreground="{DynamicResource SubtleText}"/>
+                                        </Grid>
+                                        <TextBlock Style="{StaticResource FieldHint}"
+                                                   Text="{loc:T Label_TextOpacity_Hint}"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -537,21 +668,31 @@
                                         <Path Canvas.Left="200" Canvas.Top="40"
                                               Fill="White" Stroke="#FF111827" StrokeThickness="1.2"
                                               Data="M 0,0 L 0,18 L 5,14 L 8,21 L 11,20 L 8,13 L 14,13 Z"/>
-                                        <!-- Label offset from cursor tip -->
-                                        <Border CornerRadius="3" Padding="4,1"
+                                        <!-- Label anchored on the cursor tip (200,40): horizontally CENTRED,
+                                             vertically TOP-aligned (top edge at the tip when offset is 0), then
+                                             shifted by the user offset — mirrors the live overlay. The first
+                                             translate centres the chip horizontally (-ActualWidth/2 only). -->
+                                        <Border x:Name="MouseChip" CornerRadius="3" Padding="4,1"
                                                 Canvas.Left="200" Canvas.Top="40"
                                                 Background="{Binding MousePreviewBackground}"
                                                 BorderBrush="{Binding MousePreviewBorderBrush}"
                                                 BorderThickness="{Binding MousePreviewBorderThickness}"
                                                 Opacity="{Binding MousePreviewOpacity}">
                                             <Border.RenderTransform>
-                                                <TranslateTransform X="{Binding MouseOffsetX}" Y="{Binding MouseOffsetY}"/>
+                                                <TransformGroup>
+                                                    <!-- Centre horizontally on the cursor hotspot. ElementName (not
+                                                         RelativeSource Self, which on a Transform points at the Transform
+                                                         and has no ActualWidth) so the centring actually applies. -->
+                                                    <TranslateTransform X="{Binding ActualWidth, ElementName=MouseChip, Converter={StaticResource HalfNegate}}"/>
+                                                    <TranslateTransform X="{Binding MouseOffsetX}" Y="{Binding MousePreviewOffsetY}"/>
+                                                </TransformGroup>
                                             </Border.RenderTransform>
                                             <TextBlock Text="{Binding MousePreviewCode}"
                                                        Foreground="{Binding MousePreviewForeground}"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="{Binding MousePreviewFontWeight}"
                                                        FontFamily="{Binding MouseFont}"
-                                                       FontSize="{Binding MouseSize}"/>
+                                                       FontSize="{Binding MouseSize}"
+                                                       Opacity="{Binding MousePreviewTextOpacity}"/>
                                         </Border>
                                     </Canvas>
                                 </Border>
@@ -574,7 +715,6 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
                                     <StackPanel Grid.Row="0" Grid.Column="0">
@@ -588,20 +728,7 @@
                                                       ToolTip="{loc:T Mouse_OffsetY_Tooltip}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontFamily}"/>
-                                        <ComboBox ItemsSource="{Binding AvailableFonts}"
-                                                  Text="{Binding MouseFont, UpdateSourceTrigger=PropertyChanged}"
-                                                  IsEditable="True"
-                                                  ToolTip="{loc:T Mouse_FontFamily_Tooltip}"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontSize}"/>
-                                        <ui:NumberBox Value="{Binding MouseSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
-                                                      ToolTip="{loc:T Mouse_FontSize_Tooltip}"/>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_TrackingMode}"/>
                                         <ComboBox ItemsSource="{Binding MouseTrackingModes}"
                                                   SelectedItem="{Binding MouseTrackingMode}"
@@ -610,7 +737,7 @@
                                                    Text="{loc:T Mouse_TrackingMode_Hint}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_Opacity}"/>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -631,6 +758,75 @@
                                                        Text="{Binding MouseOpacity, StringFormat={}{0:P0}}"
                                                        Foreground="{DynamicResource SubtleText}"/>
                                         </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Typography: font family / size / weight / text opacity in their own section -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel IsEnabled="{Binding MouseEnabled}">
+                                <TextBlock Text="{loc:T Label_TypographyTitle}"
+                                           FontWeight="SemiBold" FontSize="14"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Style="{StaticResource FieldHint}"
+                                           Text="{loc:T Label_TypographyHint}"/>
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontFamily}"/>
+                                        <ComboBox ItemsSource="{Binding AvailableFonts}"
+                                                  Text="{Binding MouseFont, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEditable="True"
+                                                  ToolTip="{loc:T Mouse_FontFamily_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Mouse_FontSize}"/>
+                                        <ui:NumberBox Value="{Binding MouseSize, UpdateSourceTrigger=PropertyChanged}" Minimum="6" Maximum="72" SmallChange="1" LargeChange="2"
+                                                      ToolTip="{loc:T Mouse_FontSize_Tooltip}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Label_FontWeight}"/>
+                                        <ComboBox ItemsSource="{Binding FontWeightOptions}"
+                                                  SelectedItem="{Binding MouseFontWeight}"
+                                                  ToolTip="{loc:T Label_FontWeight_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Label_TextOpacity}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="56"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider Grid.Column="0"
+                                                    Minimum="0" Maximum="1"
+                                                    SmallChange="0.05" LargeChange="0.1"
+                                                    TickFrequency="0.1" IsSnapToTickEnabled="False"
+                                                    Value="{Binding MouseTextOpacity}"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip="{loc:T Label_TextOpacity_Tooltip}"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Margin="10,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"
+                                                       Text="{Binding MouseTextOpacity, StringFormat={}{0:P0}}"
+                                                       Foreground="{DynamicResource SubtleText}"/>
+                                        </Grid>
+                                        <TextBlock Style="{StaticResource FieldHint}"
+                                                   Text="{loc:T Label_TextOpacity_Hint}"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -703,8 +899,29 @@
                                         <!-- Fake desktop area -->
                                         <Border Grid.Row="0" Background="#FFF1F5F9"/>
 
-                                        <!-- Fake taskbar (Windows 11 style) -->
-                                        <Border Grid.Row="1" Background="#FF1F2937">
+                                        <!-- Strip drawn BEHIND the taskbar — mirrors Placement='behind'. It sits between
+                                             the desktop and the taskbar, so the translucent taskbar above tints/dims it.
+                                             That bleed-through is the whole point of "behind", and it only looks like this
+                                             when Windows Transparency effects are on (see the note below). Shown only while
+                                             that case is being simulated. -->
+                                        <Border Style="{StaticResource StripPreviewSwatch}"
+                                                Background="{Binding PreviewColor}"
+                                                Visibility="{Binding StripBehindSimulated, Converter={StaticResource BoolToVis}}"/>
+
+                                        <!-- Fake taskbar (Windows 11 style). Opaque by default; while simulating a
+                                             'behind' strip it turns translucent so the swatch underneath shows through —
+                                             i.e. the preview assumes Transparency effects are ON. -->
+                                        <Border Grid.Row="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#FF1F2937"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StripBehindSimulated}" Value="True">
+                                                            <Setter Property="Background" Value="#CC1F2937"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
                                                         VerticalAlignment="Center">
                                                 <Border Width="20" Height="20" CornerRadius="3" Background="#FF60A5FA" Margin="3,0"/>
@@ -714,30 +931,20 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <!-- Strip overlay: position controlled by VerticalPosition + thickness -->
-                                        <Border Grid.Row="1"
+                                        <!-- Strip drawn IN FRONT of the taskbar — mirrors Placement='front'. Crisp, full
+                                             color over the icons. Shown only while that case is being simulated. -->
+                                        <Border Style="{StaticResource StripPreviewSwatch}"
                                                 Background="{Binding PreviewColor}"
-                                                Opacity="{Binding EffectiveStripOpacity}"
-                                                Height="{Binding StripThicknessPixels}"
-                                                Visibility="{Binding StripEnabled, Converter={StaticResource BoolToVis}}">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="VerticalAlignment" Value="Top"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding StripVerticalPosition}" Value="bottom">
-                                                            <Setter Property="VerticalAlignment" Value="Bottom"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding StripFillsTaskbar}" Value="True">
-                                                            <Setter Property="VerticalAlignment" Value="Stretch"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                        </Border>
+                                                Visibility="{Binding StripFrontSimulated, Converter={StaticResource BoolToVis}}"/>
                                     </Grid>
                                 </Border>
                                 <TextBlock Style="{StaticResource FieldHint}"
                                            Text="{loc:T Strip_PreviewHint}"/>
+                                <!-- Only relevant while simulating 'behind': the bleed-through assumes Transparency
+                                     effects are enabled. Hidden in 'front' mode, where z-order doesn't depend on it. -->
+                                <TextBlock Style="{StaticResource FieldHint}"
+                                           Text="{loc:T Strip_PreviewTransparencyNote}"
+                                           Visibility="{Binding StripBehindSimulated, Converter={StaticResource BoolToVis}}"/>
                             </StackPanel>
                         </Border>
 

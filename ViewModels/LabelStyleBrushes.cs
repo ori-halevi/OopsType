@@ -26,6 +26,38 @@ internal static class LabelStyleBrushes
         return b;
     }
 
+    /// <summary>The font-weight names offered in the settings UI (and accepted in settings.json),
+    /// in ascending visual weight. "Regular" maps to <see cref="FontWeights.Normal"/>.</summary>
+    internal static readonly string[] FontWeightNames = { "Light", "Regular", "Medium", "SemiBold", "Bold" };
+
+    /// <summary>Maps a weight name (case-insensitive) to a WPF <see cref="FontWeight"/>. Unrecognised
+    /// or null values fall back to <see cref="FontWeights.Bold"/> — the product default — so a
+    /// hand-edited typo in settings.json can never blank the label's weight.</summary>
+    internal static FontWeight ParseFontWeight(string? name) => name?.Trim().ToLowerInvariant() switch
+    {
+        "thin" => FontWeights.Thin,
+        "extralight" => FontWeights.ExtraLight,
+        "light" => FontWeights.Light,
+        "regular" or "normal" => FontWeights.Normal,
+        "medium" => FontWeights.Medium,
+        "semibold" => FontWeights.SemiBold,
+        "bold" => FontWeights.Bold,
+        "extrabold" => FontWeights.ExtraBold,
+        "black" => FontWeights.Black,
+        _ => FontWeights.Bold,
+    };
+
+    /// <summary>Snaps an arbitrary stored/loaded weight to the canonical name shown in the UI combo
+    /// (so the ComboBox SelectedItem matches an item). Anything unrecognised normalises to "Bold".</summary>
+    internal static string NormalizeFontWeightName(string? name)
+    {
+        if (!string.IsNullOrWhiteSpace(name))
+            foreach (var n in FontWeightNames)
+                if (string.Equals(n, name.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                    return n;
+        return "Bold";
+    }
+
     internal static Resolved Resolve(
         IReadOnlyDictionary<string, LabelLangStyle>? colors,
         string twoLetterCode,

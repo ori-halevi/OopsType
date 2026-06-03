@@ -34,17 +34,50 @@ public partial class ColorPickerButton : UserControl
     {
         InitializeComponent();
         Presets = BuildPresets();
+        // Seed the swatch brush from the initial color so it shows immediately, before any change.
+        SelectedBrush = BrushFor(SelectedColor);
     }
 
     /// <summary>The committed color as a hex string (e.g. "#FF2E7D32"). Two-way bindable.</summary>
     public static readonly DependencyProperty SelectedColorProperty = DependencyProperty.Register(
         nameof(SelectedColor), typeof(string), typeof(ColorPickerButton),
-        new FrameworkPropertyMetadata("#FF888888", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+        new FrameworkPropertyMetadata("#FF888888", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnSelectedColorChanged));
 
     public string SelectedColor
     {
         get => (string)GetValue(SelectedColorProperty);
         set => SetValue(SelectedColorProperty, value);
+    }
+
+    /// <summary>
+    /// Read-only <see cref="Brush"/> projection of <see cref="SelectedColor"/>, kept in sync in
+    /// code. The swatch binds to THIS (Brush→Brush) rather than binding the hex string directly:
+    /// WPF's implicit string→Brush conversion is unreliable for ElementName bindings and a shared
+    /// converter resource is not reliably reachable from inside this UserControl when it's realized
+    /// within a DataTemplate — both routes left the swatch blank. A computed brush can't fail.
+    /// </summary>
+    public static readonly DependencyProperty SelectedBrushProperty = DependencyProperty.Register(
+        nameof(SelectedBrush), typeof(Brush), typeof(ColorPickerButton),
+        new PropertyMetadata(Brushes.Transparent));
+
+    public Brush SelectedBrush
+    {
+        get => (Brush)GetValue(SelectedBrushProperty);
+        private set => SetValue(SelectedBrushProperty, value);
+    }
+
+    private static void OnSelectedColorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((ColorPickerButton)d).SelectedBrush = BrushFor(e.NewValue as string);
+
+    private static Brush BrushFor(string? hex)
+    {
+        if (TryParseColor(hex, out var c))
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+        return Brushes.Transparent;
     }
 
     /// <summary>Quick-pick swatches shown under the sliders. Read-only after construction.</summary>

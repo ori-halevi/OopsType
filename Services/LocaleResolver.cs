@@ -22,7 +22,15 @@ internal static class LocaleResolver
         var full = QueryLocale(langId, NativeMethods.LOCALE_SENGLISHLANGUAGENAME);
         var code = string.IsNullOrWhiteSpace(iso) ? "??" : iso.ToUpperInvariant();
         var label = ComputeDisplayLabel(langId, code);
-        return new LanguageInfo(hkl, langId, code, string.IsNullOrEmpty(full) ? code : full, label);
+        return new LanguageInfo(hkl, langId, code, string.IsNullOrEmpty(full) ? code : full, label, IsRightToLeft(langId));
+    }
+
+    /// <summary>True for right-to-left scripts (Hebrew, Arabic, …). Resolved from the framework's
+    /// per-culture <see cref="System.Globalization.TextInfo.IsRightToLeft"/>; unknown LCIDs are LTR.</summary>
+    private static bool IsRightToLeft(int langId)
+    {
+        try { return CultureInfo.GetCultureInfo(langId).TextInfo.IsRightToLeft; }
+        catch { return false; }
     }
 
     /// <summary>
