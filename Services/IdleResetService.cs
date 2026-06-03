@@ -44,9 +44,6 @@ public sealed class IdleResetService : IIdleResetService
         _tick.Start();
     }
 
-    /// <summary>No-op: settings are consulted on every tick, so live updates need no plumbing.</summary>
-    public void Reconfigure() { }
-
     public void Dispose()
     {
         _activity.KeyPressed -= OnKeyPressed;

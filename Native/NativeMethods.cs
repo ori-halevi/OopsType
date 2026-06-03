@@ -16,11 +16,9 @@ internal static class NativeMethods
 
     // ---- SetWindowPos flags ----
     public static readonly IntPtr HWND_TOPMOST = new(-1);
-    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_HIDEWINDOW = 0x0080;
 
     // ---- Window position change notification ----
@@ -28,7 +26,6 @@ internal static class NativeMethods
 
     // ---- WinEvent ----
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
-    public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     public const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
@@ -37,7 +34,6 @@ internal static class NativeMethods
     public const int WM_INPUTLANGCHANGEREQUEST = 0x0050;
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_SYSKEYDOWN = 0x0104;
-    public const int INPUTLANGCHANGE_FORWARD = 0x0002;
 
     // ---- Hooks ----
     public const int WH_KEYBOARD_LL = 13;
@@ -50,7 +46,6 @@ internal static class NativeMethods
 
     // ---- GetLocaleInfo ----
     public const uint LOCALE_SISO639LANGNAME = 0x0059;
-    public const uint LOCALE_SLOCALIZEDDISPLAYNAME = 0x0002;
     public const uint LOCALE_SENGLISHLANGUAGENAME = 0x1001;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -145,15 +140,8 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter,
-        string? lpszClass, string? lpszWindow);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -194,10 +182,6 @@ internal static class NativeMethods
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
     // ---- kernel32 ----
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern int GetLocaleInfoEx(string lpLocaleName, uint LCType,
-        StringBuilder lpLCData, int cchData);
-
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetLocaleInfoW(uint Locale, uint LCType,
         StringBuilder lpLCData, int cchData);

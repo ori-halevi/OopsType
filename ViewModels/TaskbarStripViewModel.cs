@@ -16,7 +16,7 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
 {
     // Neutral gray fallback used when settings have no color for the current language or when the
     // configured hex string fails to parse. Frozen so it can cross threads without contention.
-    private static readonly Brush FallbackBrush = MakeFrozen(WpfColor.FromArgb(160, 128, 128, 128));
+    private static readonly Brush FallbackBrush = LabelStyleBrushes.Freeze(WpfColor.FromArgb(160, 128, 128, 128));
 
     private readonly ISettingsService _settings;
     private readonly IKeyboardLayoutService _layout;
@@ -42,10 +42,19 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
         var colors = _settings.Current.TaskbarStrip.Colors;
         if (colors != null
             && colors.TryGetValue(info.TwoLetterCode.ToLowerInvariant(), out var hex)
-            && TryParseHex(hex, out var brush))
+            && !string.IsNullOrWhiteSpace(hex))
         {
-            Color = brush;
-            return;
+            // ParseQuiet centralises the #RGB / #RRGGBB / #AARRGGBB handling shared with the label
+            // chips. On a malformed value it returns null; we surface that once (the reporter
+            // throttles per source so a stuck bad value — e.g. a hand-edited settings.json typo —
+            // can't flood the log) and fall back to neutral gray.
+            var brush = LabelStyleBrushes.ParseQuiet(hex);
+            if (brush != null)
+            {
+                Color = brush;
+                return;
+            }
+            _reporter.Report(nameof(TaskbarStripViewModel), new FormatException($"Invalid color '{hex}'"));
         }
 
         Color = FallbackBrush;
@@ -54,34 +63,6 @@ public sealed class TaskbarStripViewModel : BindableBase, IDisposable
     // Colors are stored on the settings, so on settings.Changed we re-resolve against the current
     // language without waiting for the next layout change.
     private void OnSettingsChanged() => OnLanguageChanged(_layout.Current);
-
-    private bool TryParseHex(string hex, out Brush brush)
-    {
-        brush = FallbackBrush;
-        try
-        {
-            var c = (WpfColor)ColorConverter.ConvertFromString(hex);
-            brush = MakeFrozen(c);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // Surface malformed user input (or a hand-edited settings.json with a typo). The
-            // reporter throttles per source so a stuck bad value can't flood the log — what we
-            // gain is a single breadcrumb the user can grep for instead of silently rendering
-            // gray and wondering why their color isn't taking effect.
-            _reporter.Report("TaskbarStripViewModel.TryParseHex",
-                new FormatException($"Invalid color '{hex}': {ex.Message}", ex));
-            return false;
-        }
-    }
-
-    private static Brush MakeFrozen(WpfColor c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
-    }
 
     public void Dispose()
     {

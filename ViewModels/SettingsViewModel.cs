@@ -54,9 +54,9 @@ public sealed class SettingsViewModel : BindableBase
         DiscardCommand = new DelegateCommand(Discard, () => IsDirty).ObservesProperty(() => IsDirty);
         AddColorCommand = new DelegateCommand<string>(AddStripColor);
         RemoveColorCommand = new DelegateCommand<LangColorRow>(RemoveColorRow);
-        AddCaretColorCommand = new DelegateCommand<string>(code => AddLabelRow(CaretColorRows, code));
+        AddCaretColorCommand = new DelegateCommand<string>(code => LabelRowMapper.Add(CaretColorRows, code));
         RemoveCaretColorCommand = new DelegateCommand<LabelStyleRow>(r => { if (r != null) CaretColorRows.Remove(r); });
-        AddMouseColorCommand = new DelegateCommand<string>(code => AddLabelRow(MouseColorRows, code));
+        AddMouseColorCommand = new DelegateCommand<string>(code => LabelRowMapper.Add(MouseColorRows, code));
         RemoveMouseColorCommand = new DelegateCommand<LabelStyleRow>(r => { if (r != null) MouseColorRows.Remove(r); });
 
         // ---- dirty tracking ----
@@ -253,118 +253,26 @@ public sealed class SettingsViewModel : BindableBase
             });
     }
 
-    private static void ReloadLabelRows(ObservableCollection<LabelStyleRow> rows, Dictionary<string, LabelLangStyle> source)
-    {
-        rows.Clear();
-        foreach (var kv in source)
-            rows.Add(new LabelStyleRow
-            {
-                Code = kv.Key,
-                Background = kv.Value.Background,
-                Foreground = kv.Value.Foreground,
-                BorderColor = kv.Value.BorderColor,
-                BorderThickness = kv.Value.BorderThickness,
-            });
-    }
-
-    private static void ApplyLabelRows(ObservableCollection<LabelStyleRow> rows, Dictionary<string, LabelLangStyle> target)
-    {
-        target.Clear();
-        foreach (var row in rows)
-        {
-            var code = (row.Code ?? "").Trim().ToLowerInvariant();
-            if (string.IsNullOrEmpty(code)) continue;
-            target[code] = new LabelLangStyle
-            {
-                Background = string.IsNullOrWhiteSpace(row.Background) ? "#CC222222" : row.Background.Trim(),
-                Foreground = string.IsNullOrWhiteSpace(row.Foreground) ? "#FFFFFFFF" : row.Foreground.Trim(),
-                BorderColor = string.IsNullOrWhiteSpace(row.BorderColor) ? "#FF000000" : row.BorderColor.Trim(),
-                BorderThickness = Math.Clamp(row.BorderThickness, 0, 20),
-            };
-        }
-    }
-
-    // New rows start from the built-in dark-chip look so a freshly-added language is immediately
-    // visible (rather than a blank/transparent chip the user then has to figure out).
-    private static LabelStyleRow NewLabelRow() => new()
-    {
-        Code = "",
-        Background = "#CC222222",
-        Foreground = "#FFFFFFFF",
-        BorderColor = "#FF000000",
-        BorderThickness = 0,
-    };
-
-    // Add a language row from the picker. Silently ignores blanks and duplicates (the same code
-    // twice would just shadow itself), so the picker never produces a broken table.
-    private static void AddLabelRow(ObservableCollection<LabelStyleRow> rows, string? code)
-    {
-        var c = (code ?? "").Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(c)) return;
-        foreach (var r in rows)
-            if (string.Equals((r.Code ?? "").Trim(), c, StringComparison.OrdinalIgnoreCase)) return;
-        var row = NewLabelRow();
-        row.Code = c;
-        rows.Add(row);
-    }
-
     // ---- Caret / Mouse live-preview projections ----
-    // The preview chip uses the FIRST configured row (mirrors the strip preview's "first row wins"
-    // rule), falling back to the built-in dark chip + "EN" when no usable row exists yet.
-    private static LabelStyleRow? FirstUsableRow(ObservableCollection<LabelStyleRow> rows)
-    {
-        foreach (var r in rows)
-            if (!string.IsNullOrWhiteSpace(r.Code)) return r;
-        return null;
-    }
-
-    private static string PreviewCodeOf(ObservableCollection<LabelStyleRow> rows)
-        => FirstUsableRow(rows)?.Code is { Length: > 0 } code ? code.Trim().ToUpperInvariant() : "EN";
-
-    private static Brush PreviewBrushOf(ObservableCollection<LabelStyleRow> rows, Func<LabelStyleRow, string> pick, Brush fallback)
-    {
-        var row = FirstUsableRow(rows);
-        if (row == null) return fallback;
-        return LabelStyleBrushes.ParseQuiet(pick(row)) ?? fallback;
-    }
-
-    private static readonly Brush PreviewDefaultBackground = LabelStyleBrushes.ParseQuiet("#CC222222")!;
-    private static readonly Brush PreviewDefaultForeground = LabelStyleBrushes.ParseQuiet("#FFFFFFFF")!;
-    private static readonly Brush PreviewTransparent = LabelStyleBrushes.ParseQuiet("#00000000")!;
-
-    public string CaretPreviewCode => PreviewCodeOf(CaretColorRows);
-    public Brush CaretPreviewBackground => PreviewBrushOf(CaretColorRows, r => r.Background, PreviewDefaultBackground);
-    public Brush CaretPreviewForeground => PreviewBrushOf(CaretColorRows, r => r.Foreground, PreviewDefaultForeground);
-    public Brush CaretPreviewBorderBrush => PreviewBorderBrushOf(CaretColorRows);
-    public Thickness CaretPreviewBorderThickness => PreviewBorderThicknessOf(CaretColorRows);
+    // Row→preview mapping lives in LabelRowMapper (shared, side-effect-free); these properties
+    // just surface the active chip look for the live preview shown in the settings page.
+    public string CaretPreviewCode => LabelRowMapper.PreviewCode(CaretColorRows);
+    public Brush CaretPreviewBackground => LabelRowMapper.PreviewBackground(CaretColorRows);
+    public Brush CaretPreviewForeground => LabelRowMapper.PreviewForeground(CaretColorRows);
+    public Brush CaretPreviewBorderBrush => LabelRowMapper.PreviewBorderBrush(CaretColorRows);
+    public Thickness CaretPreviewBorderThickness => LabelRowMapper.PreviewBorderThickness(CaretColorRows);
     public double CaretPreviewOpacity => _caretOpacity;
     public FontWeight CaretPreviewFontWeight => LabelStyleBrushes.ParseFontWeight(_caretFontWeight);
     public double CaretPreviewTextOpacity => _caretTextOpacity;
 
-    public string MousePreviewCode => PreviewCodeOf(MouseColorRows);
-    public Brush MousePreviewBackground => PreviewBrushOf(MouseColorRows, r => r.Background, PreviewDefaultBackground);
-    public Brush MousePreviewForeground => PreviewBrushOf(MouseColorRows, r => r.Foreground, PreviewDefaultForeground);
-    public Brush MousePreviewBorderBrush => PreviewBorderBrushOf(MouseColorRows);
-    public Thickness MousePreviewBorderThickness => PreviewBorderThicknessOf(MouseColorRows);
+    public string MousePreviewCode => LabelRowMapper.PreviewCode(MouseColorRows);
+    public Brush MousePreviewBackground => LabelRowMapper.PreviewBackground(MouseColorRows);
+    public Brush MousePreviewForeground => LabelRowMapper.PreviewForeground(MouseColorRows);
+    public Brush MousePreviewBorderBrush => LabelRowMapper.PreviewBorderBrush(MouseColorRows);
+    public Thickness MousePreviewBorderThickness => LabelRowMapper.PreviewBorderThickness(MouseColorRows);
     public double MousePreviewOpacity => _mouseOpacity;
     public FontWeight MousePreviewFontWeight => LabelStyleBrushes.ParseFontWeight(_mouseFontWeight);
     public double MousePreviewTextOpacity => _mouseTextOpacity;
-
-    private static Brush PreviewBorderBrushOf(ObservableCollection<LabelStyleRow> rows)
-    {
-        var row = FirstUsableRow(rows);
-        if (row == null || row.BorderThickness <= 0) return PreviewTransparent;
-        return LabelStyleBrushes.ParseQuiet(row.BorderColor) ?? PreviewTransparent;
-    }
-
-    private static Thickness PreviewBorderThicknessOf(ObservableCollection<LabelStyleRow> rows)
-    {
-        var row = FirstUsableRow(rows);
-        if (row == null || row.BorderThickness <= 0) return new Thickness(0);
-        // Only show the border in the preview if the color actually parses, so a bad hex doesn't
-        // leave a phantom border with no visible stroke.
-        return LabelStyleBrushes.ParseQuiet(row.BorderColor) == null ? new Thickness(0) : new Thickness(row.BorderThickness);
-    }
 
     private static readonly string[] CaretPreviewProps =
     {
@@ -789,8 +697,8 @@ public sealed class SettingsViewModel : BindableBase
         _mouseTextOpacity = Math.Clamp(s.MouseLabel.TextOpacity, 0.0, 1.0);
         _mouseTrackingMode = NormalizeTrackingMode(s.MouseLabel.TrackingMode);
 
-        ReloadLabelRows(CaretColorRows, s.CaretLabel.Colors);
-        ReloadLabelRows(MouseColorRows, s.MouseLabel.Colors);
+        LabelRowMapper.Reload(CaretColorRows, s.CaretLabel.Colors);
+        LabelRowMapper.Reload(MouseColorRows, s.MouseLabel.Colors);
 
         _stripEnabled = s.TaskbarStrip.Enabled;
         _stripThickness = s.TaskbarStrip.Thickness;
@@ -855,7 +763,7 @@ public sealed class SettingsViewModel : BindableBase
         s.CaretLabel.Opacity = Math.Clamp(CaretOpacity, 0.0, 1.0);
         s.CaretLabel.FontWeight = LabelStyleBrushes.NormalizeFontWeightName(CaretFontWeight);
         s.CaretLabel.TextOpacity = Math.Clamp(CaretTextOpacity, 0.0, 1.0);
-        ApplyLabelRows(CaretColorRows, s.CaretLabel.Colors);
+        LabelRowMapper.Apply(CaretColorRows, s.CaretLabel.Colors);
 
         s.MouseLabel.Enabled = MouseEnabled;
         s.MouseLabel.OffsetX = MouseOffsetX;
@@ -866,7 +774,7 @@ public sealed class SettingsViewModel : BindableBase
         s.MouseLabel.FontWeight = LabelStyleBrushes.NormalizeFontWeightName(MouseFontWeight);
         s.MouseLabel.TextOpacity = Math.Clamp(MouseTextOpacity, 0.0, 1.0);
         s.MouseLabel.TrackingMode = NormalizeTrackingMode(MouseTrackingMode);
-        ApplyLabelRows(MouseColorRows, s.MouseLabel.Colors);
+        LabelRowMapper.Apply(MouseColorRows, s.MouseLabel.Colors);
 
         s.TaskbarStrip.Enabled = StripEnabled;
         s.TaskbarStrip.Thickness = StripThickness ?? "small";
@@ -905,36 +813,4 @@ public sealed class SettingsViewModel : BindableBase
 
         IsDirty = false;
     }
-}
-
-public sealed class LangColorRow : BindableBase
-{
-    private string _code = "";
-    private string _color = "#888888";
-    public string Code { get => _code; set => SetProperty(ref _code, value); }
-    public string Color { get => _color; set => SetProperty(ref _color, value); }
-}
-
-/// <summary>One editable row in a caret/mouse label color table: a language code mapped to the
-/// chip's background, text and border appearance. <see cref="BorderThickness"/> of 0 = no border.</summary>
-public sealed class LabelStyleRow : BindableBase
-{
-    private string _code = "";
-    private string _background = "#CC222222";
-    private string _foreground = "#FFFFFFFF";
-    private string _borderColor = "#FF000000";
-    private double _borderThickness;
-    public string Code { get => _code; set => SetProperty(ref _code, value); }
-    public string Background { get => _background; set => SetProperty(ref _background, value); }
-    public string Foreground { get => _foreground; set => SetProperty(ref _foreground, value); }
-    public string BorderColor { get => _borderColor; set => SetProperty(ref _borderColor, value); }
-    public double BorderThickness
-    {
-        get => _borderThickness;
-        set { if (SetProperty(ref _borderThickness, value)) RaisePropertyChanged(nameof(BorderThicknessUniform)); }
-    }
-
-    /// <summary>Uniform <see cref="Thickness"/> projection of <see cref="BorderThickness"/> for the
-    /// swatch's BorderThickness binding (Border expects a Thickness, not a bare double).</summary>
-    public Thickness BorderThicknessUniform => new(_borderThickness);
 }

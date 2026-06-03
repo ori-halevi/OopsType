@@ -11,7 +11,23 @@ public sealed class AppSettings
     public GeneralSettings General { get; set; } = new();
 }
 
-public sealed class CaretLabelSettings
+/// <summary>
+/// The chip-appearance fields the caret/mouse label overlay view-models project into WPF brushes.
+/// Both <see cref="CaretLabelSettings"/> and <see cref="MouseLabelSettings"/> implement it so a
+/// single base view-model can resolve typography and per-language colors without caring which label
+/// it is — only get-accessors, since the VMs read these but never mutate the persisted settings.
+/// </summary>
+public interface ILabelStyleSettings
+{
+    string Font { get; }
+    int Size { get; }
+    double Opacity { get; }
+    string FontWeight { get; }
+    double TextOpacity { get; }
+    Dictionary<string, LabelLangStyle> Colors { get; }
+}
+
+public sealed class CaretLabelSettings : ILabelStyleSettings
 {
     public bool Enabled { get; set; } = true;
 
@@ -59,7 +75,7 @@ public sealed class CaretLabelSettings
     };
 }
 
-public sealed class MouseLabelSettings
+public sealed class MouseLabelSettings : ILabelStyleSettings
 {
     public bool Enabled { get; set; } = false;
     /// <summary>Offset from the cursor hotspot, in DIPs. Horizontally the chip is CENTRED on the tip
