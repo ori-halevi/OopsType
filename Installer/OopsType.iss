@@ -22,7 +22,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define MyAppName        "OopsType"
-#define MyAppVersion     "1.0.0"
+#define MyAppVersion     "2.0.0"
 #define MyAppPublisher   "ori halevi"
 #define MyAppURL         "https://github.com/ori-halevi/OopsType"
 #define MyAppExeName     "OopsType.exe"
