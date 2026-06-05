@@ -94,6 +94,13 @@ public sealed class CaretLocationService : ICaretLocationService
                 || patternObj is not TextPattern tp)
                 return false;
 
+            // The chip is a "you're typing in language X" hint, so it only belongs over a real text
+            // ENTRY target. Read-only text — a web article you're reading, a docs/PDF viewer, a
+            // disabled field — exposes TextPattern just the same, and the collapsed-selection
+            // recovery below would happily synthesize a caret for it, parking the chip over text the
+            // user is only reading. Suppress those: they're never a place a keystroke would land.
+            if (IsReadOnlyTarget(focused)) return false;
+
             var sel = tp.GetSelection();
             if (sel == null || sel.Length == 0) return false;
 
@@ -112,6 +119,37 @@ public sealed class CaretLocationService : ICaretLocationService
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// True when the focused element is text the user can only READ, not edit, so the caret chip
+    /// should stay hidden. Two complementary signals, either of which is conclusive:
+    ///   - <c>ValuePattern.IsReadOnly</c> — the explicit "this control is read-only" flag, set by
+    ///     edit/textarea controls with the readonly attribute and by Chromium for non-editable
+    ///     documents.
+    ///   - <c>!IsKeyboardFocusable</c> — static text content (article paragraphs, captions, labels)
+    ///     can't receive keyboard focus, so a keystroke could never land there. A genuine editable
+    ///     control is always keyboard-focusable, so this never hides the chip over a real caret.
+    /// Fail-open on any error: a stray chip is a smaller annoyance than a missing one over a field
+    /// the user really is typing in.
+    /// </summary>
+    private static bool IsReadOnlyTarget(AutomationElement element)
+    {
+        try
+        {
+            if (element.TryGetCurrentPattern(ValuePattern.Pattern, out var valueObj)
+                && valueObj is ValuePattern value
+                && value.Current.IsReadOnly)
+                return true;
+
+            if (!element.Current.IsKeyboardFocusable)
+                return true;
+        }
+        catch
+        {
+            // Element went away or the provider faulted — treat as editable so we don't over-hide.
+        }
+        return false;
     }
 
     /// <summary>Reads the first bounding rectangle of a text range, rejecting empty/degenerate ones.</summary>

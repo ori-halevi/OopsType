@@ -19,9 +19,9 @@
        window via AssemblyInformationalVersionAttribute / AssemblyCopyrightAttribute — so bumping
        <Version> here updates both the binary and the UI. Bump <Version> for every release. -->
   <PropertyGroup>
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
+    <Version>2.1.0</Version>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>2.1.0.0</FileVersion>
     <Product>OopsType</Product>
     <Authors>Ori Halevi</Authors>
     <Company>Ori Halevi</Company>

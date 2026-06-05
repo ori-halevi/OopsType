@@ -9,11 +9,14 @@
 ;     target machine does NOT need the .NET 9 Desktop Runtime installed.
 ;   * WPF single-file leaves a few native DLLs next to the .exe; we ship the WHOLE
 ;     publish folder (the app fails to start with only the .exe).
-;   * Current-user-only install (no admin / no UAC). Installs under the user's profile
-;     (%LOCALAPPDATA%\Programs\OopsType by default) — NOT C:\Program Files, which is
-;     admin-only and would make it an all-users install.
-;   * The app writes only to %LOCALAPPDATA%\OopsType and HKCU at runtime, so nothing it
-;     does at runtime needs elevation.
+;   * All-users install (requires admin / one UAC prompt). Installs the binaries under
+;     C:\Program Files\OopsType ({autopf}) so every user on the machine shares one copy.
+;   * The app itself never needs elevation at runtime: it writes only to the CURRENT user's
+;     %LOCALAPPDATA%\OopsType (settings.json, logs, custom languages) and HKCU. So settings,
+;     autostart and the chosen UI language are all PER-USER even though the program is shared.
+;   * Setup hands the user's chosen wizard language to the app: on ssPostInstall we drop a
+;     one-line setup.lang next to the exe ("he"/"en"); each user's first launch reads it and
+;     adopts it as their initial UI language (see SettingsService.ReadSetupLanguage).
 ;   * Autostart is owned by the app itself (General → Launch on Windows startup, an
 ;     HKCU\...\Run value). The installer does NOT create or delete that value at install
 ;     time; it only cleans it up on uninstall so no stale entry is left pointing at a
@@ -22,7 +25,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define MyAppName        "OopsType"
-#define MyAppVersion     "2.0.0"
+#define MyAppVersion     "2.1.0"
 #define MyAppPublisher   "ori halevi"
 #define MyAppURL         "https://github.com/ori-halevi/OopsType"
 #define MyAppExeName     "OopsType.exe"
@@ -47,20 +50,18 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 
-; Default install location. This is a per-user install (PrivilegesRequired=lowest below),
-; so {autopf} resolves to %LOCALAPPDATA%\Programs — i.e. C:\Users\<user>\AppData\Local\
-; Programs\OopsType. It deliberately does NOT default to C:\Program Files: that folder is
-; admin-only and writing to it would be an all-users install, not "current user only".
-; The user can still change the folder on the directory page (shown below).
+; Default install location. This is an all-users install (PrivilegesRequired=admin below),
+; so {autopf} resolves to C:\Program Files\OopsType — one shared copy for everyone on the
+; machine. The user can still change the folder on the directory page (shown below).
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ; Always show the "choose install folder" page (you asked for this explicitly).
 DisableDirPage=no
 
-; Current-user-only install — no admin elevation, no UAC prompt. The whole install lands
-; under the user's profile and Add/Remove Programs lists it for this user only.
-PrivilegesRequired=lowest
+; All-users install — requires admin elevation (one UAC prompt). Files land in Program Files
+; and Add/Remove Programs lists OopsType machine-wide for every user.
+PrivilegesRequired=admin
 
 ; This is a 64-bit build — refuse to install on 32-bit Windows and use the real
 ; (non-redirected) 64-bit Program Files / registry view. x64compatible also allows
@@ -110,36 +111,113 @@ Name: "{autodesktop}\{#MyAppName}";    Filename: "{app}\{#MyAppExeName}"; Tasks:
 ; it only sets it once on first launch (deliberately never re-asserting it afterwards).
 ; Deleting it on upgrade would silently disable autostart for users who enabled it. We only
 ; remove the value on UNINSTALL, so no stale entry is left pointing at a deleted exe.
+; NOTE: autostart is per-user (HKCU). On an all-users uninstall this only clears the Run value
+; of the user running the uninstaller; another user's stale value, if any, simply points at a
+; missing exe and Windows silently ignores it at logon — harmless.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: none; ValueName: "OopsType"; \
     Flags: dontcreatekey uninsdeletevalue
 
+[UninstallDelete]
+; setup.lang is written by [Code] at ssPostInstall (not part of [Files]), so remove it
+; explicitly on uninstall — otherwise it would keep the {app} folder from being deleted.
+Type: files; Name: "{app}\setup.lang"
+
 [Run]
 ; Offer to launch OopsType when the installer finishes (skipped on /SILENT installs).
-; The installer already runs unelevated as the current user, so the app launches in the
-; right user context and its first-launch autostart lands in the correct HKCU.
+; The installer is elevated (admin), so without runasoriginaluser the app would start AS the
+; elevating admin and its first-launch per-user state (settings.json, autostart HKCU, the
+; setup.lang language read) would land in the wrong profile. runasoriginaluser drops back to
+; the originally logged-on user so that state is created in the right place.
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
-{ On uninstall, the app's data folder (%LOCALAPPDATA%\OopsType — settings.json, logs, and
-  any user-added language packs) is left behind by default so a reinstall keeps the user's
-  configuration. Here we ASK whether to wipe it for a full, clean removal. }
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+const
+  ProfileListKey = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList';
+
+{ Map the wizard language (the [Languages] entry name the user picked) to the app's two-letter
+  language-pack code. Extend the case as you add more bundled wizard languages. }
+function AppLanguageCode(): String;
+begin
+  if ActiveLanguage = 'hebrew' then
+    Result := 'he'
+  else
+    Result := 'en';
+end;
+
+{ Hand the user's chosen wizard language to the app. We drop a one-line setup.lang next to the
+  exe; the app reads it on each user's FIRST launch and adopts it as their initial UI language
+  (SettingsService.ReadSetupLanguage). Written here rather than via [Files] because the content
+  is dynamic; removed again by [UninstallDelete]. }
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SaveStringToFile(ExpandConstant('{app}\setup.lang'), AppLanguageCode(), False);
+end;
+
+{ This is an all-users install but the app's data is PER-USER (%LOCALAPPDATA%\OopsType —
+  settings.json, logs, custom language packs). A "full removal" must therefore wipe that folder
+  in EVERY user profile, not just the one running the uninstaller. The uninstaller is elevated,
+  so we enumerate the machine's profiles via HKLM\...\ProfileList and delete each one's copy.
+  Only profiles that actually ran OopsType have the folder, so this never touches unrelated data. }
+function DataDirForProfile(const ProfilePath: String): String;
+begin
+  Result := AddBackslash(ProfilePath) + 'AppData\Local\OopsType';
+end;
+
+function AnyUserDataExists(): Boolean;
 var
-  DataDir: String;
+  Names: TArrayOfString;
+  i: Integer;
+  ProfilePath: String;
+begin
+  Result := False;
+  if not RegGetSubkeyNames(HKEY_LOCAL_MACHINE, ProfileListKey, Names) then
+    Exit;
+  for i := 0 to GetArrayLength(Names) - 1 do
+    if RegQueryStringValue(HKEY_LOCAL_MACHINE, ProfileListKey + '\' + Names[i],
+                           'ProfileImagePath', ProfilePath) then
+      if DirExists(DataDirForProfile(ProfilePath)) then
+      begin
+        Result := True;
+        Exit;
+      end;
+end;
+
+procedure DeleteAllUsersData();
+var
+  Names: TArrayOfString;
+  i: Integer;
+  ProfilePath, DataDir: String;
+begin
+  if not RegGetSubkeyNames(HKEY_LOCAL_MACHINE, ProfileListKey, Names) then
+    Exit;
+  for i := 0 to GetArrayLength(Names) - 1 do
+    if RegQueryStringValue(HKEY_LOCAL_MACHINE, ProfileListKey + '\' + Names[i],
+                           'ProfileImagePath', ProfilePath) then
+    begin
+      DataDir := DataDirForProfile(ProfilePath);
+      if DirExists(DataDir) then
+        DelTree(DataDir, True, True, True);
+    end;
+end;
+
+{ On uninstall, the app's per-user data is left behind by default so a reinstall keeps the
+  user's configuration. Here we ASK whether to wipe it (for all users) for a full, clean
+  removal. MB_DEFBUTTON2 makes "No" (keep) the default so a /VERYSILENT uninstall preserves
+  data unless explicitly told otherwise. }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    DataDir := ExpandConstant('{localappdata}\OopsType');
-    if DirExists(DataDir) then
+    if AnyUserDataExists() then
     begin
-      if MsgBox('Also delete OopsType settings and data?' + #13#10 + #13#10 +
-                DataDir + #13#10 + #13#10 +
+      if MsgBox('Also delete OopsType settings and data for all users?' + #13#10 + #13#10 +
                 'Choose Yes for a full removal (settings, logs and custom languages will be lost).' + #13#10 +
                 'Choose No to keep your configuration for a future reinstall.',
-                mbConfirmation, MB_YESNO) = IDYES then
-        DelTree(DataDir, True, True, True);
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+        DeleteAllUsersData();
     end;
   end;
 end;

@@ -1,0 +1,50 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logo-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="55%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="chip-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="18" flood-color="#1D4ED8" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+
+  <!-- Chip mark with gradient fill and subtle shadow — self-contained on transparent bg -->
+  <!-- chip: centered, 440×300, with generous rx=52 -->
+  <g filter="url(#soft-shadow)">
+    <rect x="36" y="106" width="440" height="300" rx="52" fill="url(#logo-grad)"/>
+  </g>
+
+  <!-- Sheen layer -->
+  <rect x="36" y="106" width="440" height="300" rx="52" fill="url(#chip-sheen)"/>
+
+  <!-- Chip border: subtle inner highlight -->
+  <rect x="36" y="106" width="440" height="300" rx="52" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-opacity="0.2"/>
+
+  <!-- Bold "A" letterform, white -->
+  <text
+    x="214"
+    y="306"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="168"
+    font-weight="700"
+    fill="#FFFFFF"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    letter-spacing="-5"
+  >A</text>
+
+  <!-- I-beam caret, amber -->
+  <!-- Vertical bar -->
+  <rect x="290" y="166" width="15" height="160" rx="7.5" fill="#F59E0B"/>
+  <!-- Top cap -->
+  <rect x="275" y="166" width="45" height="12" rx="6" fill="#F59E0B"/>
+  <!-- Bottom cap -->
+  <rect x="275" y="314" width="45" height="12" rx="6" fill="#F59E0B"/>
+
+</svg>

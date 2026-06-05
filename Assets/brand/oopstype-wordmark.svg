@@ -1,0 +1,65 @@
+<svg viewBox="0 0 680 160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wm-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="55%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="wm-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.04"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark: 130x130 chip, centered vertically in 160px tall artboard → y=15 -->
+  <!-- Chip background -->
+  <rect x="15" y="15" width="130" height="130" rx="29" fill="url(#wm-grad)"/>
+  <rect x="15" y="15" width="130" height="130" rx="29" fill="url(#wm-sheen)"/>
+  <rect x="15" y="15" width="130" height="130" rx="29" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-opacity="0.18"/>
+
+  <!-- "A" letterform, white, centered left half of chip -->
+  <text
+    x="78"
+    y="107"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="72"
+    font-weight="700"
+    fill="#FFFFFF"
+    text-anchor="middle"
+    dominant-baseline="auto"
+  >A</text>
+
+  <!-- I-beam caret, amber, right of A -->
+  <!-- vertical bar -->
+  <rect x="107" y="46" width="8" height="68" rx="4" fill="#F59E0B"/>
+  <!-- top cap -->
+  <rect x="100" y="46" width="22" height="7" rx="3.5" fill="#F59E0B"/>
+  <!-- bottom cap -->
+  <rect x="100" y="107" width="22" height="7" rx="3.5" fill="#F59E0B"/>
+
+  <!-- Wordmark: "OopsType" in dark text -->
+  <!-- "Oops" regular weight + "Type" normal -->
+  <text
+    x="168"
+    y="88"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="62"
+    font-weight="700"
+    fill="#1F2937"
+    dominant-baseline="central"
+    letter-spacing="-2"
+  >Oops<tspan fill="#2563EB">Type</tspan></text>
+
+  <!-- Subtle tagline below -->
+  <text
+    x="170"
+    y="125"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="18"
+    font-weight="400"
+    fill="#6B7280"
+    dominant-baseline="central"
+    letter-spacing="0.3"
+  >Stop typing in the wrong language.</text>
+
+</svg>

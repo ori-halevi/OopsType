@@ -20,6 +20,25 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(80);
 
+    // Transient shell/system surfaces that briefly steal the foreground but never represent a place
+    // the user is typing: the taskbar itself, the Win11 quick-settings (network/sound/battery)
+    // flyout, the notification/calendar flyout, task view, and the IME/language switch popup. Each
+    // runs on a shell UI thread that carries its OWN input locale, unrelated to the app the user was
+    // actually typing in. If we let one drive the indicator, clicking it flips the chip + strip
+    // colors and closing it flips them back — a spurious inversion. While one of these holds the
+    // foreground we keep showing the last real app's layout instead.
+    private static readonly HashSet<string> TransientShellClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Shell_TrayWnd",                        // primary taskbar
+        "Shell_SecondaryTrayWnd",               // taskbar on secondary monitors
+        "TrayNotifyWnd",                        // notification area / clock region
+        "ControlCenterWindow",                  // Win11 quick settings (network / sound / battery)
+        "TopLevelWindowForOverflowXamlIsland",  // taskbar corner / system-tray overflow
+        "Shell_InputSwitchTopLevelWindow",      // language / input-method switch popup
+        "MultitaskingViewFrame",                // task view (Win+Tab)
+        "XamlExplorerHostIslandWindow",         // Win11 start / search / widgets host
+    };
+
     private readonly IErrorReporter _reporter;
     private readonly DispatcherTimer _pollTimer;
     private WinEventHook? _focusHook;
@@ -125,7 +144,9 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
     private void CheckLayout()
     {
         var info = GetForegroundLayout();
-        if (info.Hkl == _current.Hkl) return;
+        // null = no real input surface in the foreground (lost focus, or a transient shell flyout).
+        // Hold the last known layout rather than flipping the indicator to the shell's locale.
+        if (info == null || info.Hkl == _current.Hkl) return;
 
         _current = info;
         // A buggy LanguageChanged subscriber must not destabilize the poll loop.
@@ -133,13 +154,50 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
         catch (Exception ex) { _reporter.Report("KeyboardLayoutService.LanguageChanged", ex); }
     }
 
-    private static LanguageInfo GetForegroundLayout()
+    /// <summary>
+    /// Resolves the layout of the foreground app's input target, or <c>null</c> when the foreground
+    /// is something we should ignore (no window, or a transient shell surface — see
+    /// <see cref="TransientShellClasses"/>) so the caller can hold the last real value.
+    /// </summary>
+    private static LanguageInfo? GetForegroundLayout()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
-        if (hwnd == IntPtr.Zero) return LanguageInfo.Unknown;
-        var tid = NativeMethods.GetWindowThreadProcessId(hwnd, IntPtr.Zero);
-        var hkl = NativeMethods.GetKeyboardLayout(tid);
+        if (hwnd == IntPtr.Zero) return null;
+
+        if (TransientShellClasses.Contains(NativeMethods.GetWindowClass(hwnd)))
+            return null;
+
+        var hkl = NativeMethods.GetKeyboardLayout(ResolveInputThread(hwnd));
         return LocaleResolver.Resolve(hkl);
+    }
+
+    /// <summary>
+    /// Thread whose input locale represents what the user is typing. For classic apps that's simply
+    /// the foreground window's own thread, but modern WinUI / island-hosted apps (e.g. the Windows 11
+    /// Notepad) route keyboard focus to a child window owned by a DIFFERENT UI thread; reading the
+    /// outer frame thread's layout there returns a value that never tracks an in-app language switch.
+    /// GUITHREADINFO names the genuinely focused window, so we prefer its thread and fall back to the
+    /// foreground thread when focus info is unavailable.
+    /// </summary>
+    private static uint ResolveInputThread(IntPtr foreground)
+    {
+        var tid = NativeMethods.GetWindowThreadProcessId(foreground, IntPtr.Zero);
+
+        var info = new NativeMethods.GUITHREADINFO
+        {
+            cbSize = (uint)Marshal.SizeOf<NativeMethods.GUITHREADINFO>()
+        };
+        if (!NativeMethods.GetGUIThreadInfo(tid, ref info))
+            return tid;
+
+        var focusWindow = info.hwndFocus != IntPtr.Zero ? info.hwndFocus
+                        : info.hwndCaret != IntPtr.Zero ? info.hwndCaret
+                        : IntPtr.Zero;
+        if (focusWindow == IntPtr.Zero)
+            return tid;
+
+        var focusTid = NativeMethods.GetWindowThreadProcessId(focusWindow, IntPtr.Zero);
+        return focusTid != 0 ? focusTid : tid;
     }
 
     [DllImport("user32.dll", EntryPoint = "GetKeyboardLayoutList")]

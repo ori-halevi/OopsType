@@ -211,6 +211,12 @@ public sealed class SettingsService : ISettingsService
     /// </summary>
     private void ApplyFirstRunDefaults(AppSettings s)
     {
+        // Adopt the UI language the user picked in the setup wizard (if any) as this user's
+        // initial language. See ReadSetupLanguage for the handoff mechanism.
+        var setupLang = ReadSetupLanguage();
+        if (!string.IsNullOrEmpty(setupLang))
+            s.General.Language = setupLang;
+
         if (_transparency.IsTransparencyEffectsEnabled())
         {
             s.TaskbarStrip.Placement = "behind";
@@ -223,6 +229,28 @@ public sealed class SettingsService : ISettingsService
             s.TaskbarStrip.Thickness = "medium";
             s.TaskbarStrip.VerticalPosition = "bottom";
             s.TaskbarStrip.OpacityEnabled = false;
+        }
+    }
+
+    /// <summary>
+    /// On a fresh install the setup wizard drops a one-line <c>setup.lang</c> next to the exe
+    /// holding the two-letter UI language code the user chose during installation (e.g. "he"/"en").
+    /// We read it once, on first launch, so the app opens in the language picked in the installer —
+    /// after that the user's own choice in the settings window takes over. Best-effort: a missing or
+    /// unreadable file just returns empty, leaving the default ("" → English fallback).
+    /// </summary>
+    private string ReadSetupLanguage()
+    {
+        try
+        {
+            var file = Path.Combine(AppContext.BaseDirectory, "setup.lang");
+            if (!File.Exists(file)) return string.Empty;
+            return File.ReadAllText(file).Trim();
+        }
+        catch (Exception ex)
+        {
+            _reporter.Report("SettingsService.ReadSetupLanguage", ex);
+            return string.Empty;
         }
     }
 }

@@ -1,0 +1,57 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Single-path monochrome glyph for OopsType.
+    fill-rule="evenodd": chip outline filled, letter + caret punched out as cutouts.
+    24-grid, ~1px padding. Re-tintable.
+
+    Outer shape: rounded-rect chip (rx=3.5) spanning x=1..23, y=4..20
+    A letterform: triangle with crossbar, simplified as two triangular regions + crossbar slot
+    I-beam caret: vertical rect + two caps, punched out right of A
+  -->
+  <path fill-rule="evenodd" fill="currentColor"
+    d="
+      M 4.5 4
+      C 2.567 4 1 5.567 1 7.5
+      L 1 16.5
+      C 1 18.433 2.567 20 4.5 20
+      L 19.5 20
+      C 21.433 20 23 18.433 23 16.5
+      L 23 7.5
+      C 23 5.567 21.433 4 19.5 4
+      Z
+
+      M 9.1 16
+      L 10.2 13.3
+      L 13.0 13.3
+      L 14.1 16
+      L 15.3 16
+      L 12.2 8
+      L 11.0 8
+      L 7.9 16
+      Z
+
+      M 10.65 12.2
+      L 11.6 9.7
+      L 12.55 12.2
+      Z
+
+      M 16.3 8
+      L 16.3 8.8
+      L 17.2 8.8
+      L 17.2 8
+      Z
+
+      M 16.3 9.6
+      L 16.3 14.4
+      L 17.2 14.4
+      L 17.2 9.6
+      Z
+
+      M 16.3 15.2
+      L 16.3 16
+      L 17.2 16
+      L 17.2 15.2
+      Z
+    "
+  />
+</svg>
