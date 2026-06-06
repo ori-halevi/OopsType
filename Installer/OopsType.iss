@@ -25,7 +25,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define MyAppName        "OopsType"
-#define MyAppVersion     "2.1.0"
+#define MyAppVersion     "2.2.0"
 #define MyAppPublisher   "ori halevi"
 #define MyAppURL         "https://github.com/ori-halevi/OopsType"
 #define MyAppExeName     "OopsType.exe"
@@ -77,7 +77,7 @@ AppMutex=Local\OopsType.SingleInstance.{{8F2C7A14-3E5B-4E2A-9D6F-7B1C0A4F8E92}
 LicenseFile={#SrcRoot}\LICENSE
 SetupIconFile={#SrcRoot}\Assets\logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-UninstallDisplayName={#MyAppName} {#MyAppVersion}
+UninstallDisplayName={#MyAppName}
 
 WizardStyle=modern
 Compression=lzma2/max

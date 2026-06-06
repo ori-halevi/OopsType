@@ -172,6 +172,14 @@ public sealed class GeneralSettings
     public bool Autostart { get; set; } = true;
 
     /// <summary>
+    /// When true, OopsType hides the built-in Windows language/input indicator (the legacy
+    /// "language bar" surfaced through Text Services) from the taskbar, so the user relies on
+    /// OopsType's own overlays instead. Opt-in — defaults to false so we never touch the user's
+    /// Windows configuration unless they ask. Applied via <see cref="Services.ILanguageBarService"/>.
+    /// </summary>
+    public bool HideWindowsLanguageBar { get; set; } = false;
+
+    /// <summary>
     /// Code of the language pack used by the settings window and tray menu (e.g. "en", "he").
     /// Empty means "use default" — LocalizationService resolves it against whatever packs it
     /// discovered, falling back to English if none match.

@@ -66,6 +66,7 @@ public partial class App
         c.RegisterSingleton<IIdleResetService, IdleResetService>();
         c.RegisterSingleton<ITaskbarService, TaskbarService>();
         c.RegisterSingleton<IStartupService, StartupService>();
+        c.RegisterSingleton<ILanguageBarService, LanguageBarService>();
 
         // ---- Overlay layer ----
         c.RegisterSingleton<CaretOverlayPresenter>();

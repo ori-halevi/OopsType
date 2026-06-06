@@ -24,15 +24,17 @@ public sealed class SettingsViewModel : BindableBase
     private readonly ISettingsService _settings;
     private readonly IKeyboardLayoutService _layout;
     private readonly IStartupService _startup;
+    private readonly ILanguageBarService _languageBar;
     private readonly ILocalizationService _localization;
     private readonly IErrorReporter _reporter;
     private readonly bool _initialized;
 
-    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup, ILocalizationService localization, IErrorReporter reporter)
+    public SettingsViewModel(ISettingsService settings, IKeyboardLayoutService layout, IStartupService startup, ILanguageBarService languageBar, ILocalizationService localization, IErrorReporter reporter)
     {
         _settings = settings;
         _layout = layout;
         _startup = startup;
+        _languageBar = languageBar;
         _localization = localization;
         _reporter = reporter;
 
@@ -521,6 +523,11 @@ public sealed class SettingsViewModel : BindableBase
     private bool _autostart;
     public bool Autostart { get => _autostart; set => SetProperty(ref _autostart, value); }
 
+    private bool _hideLanguageBar;
+    /// <summary>Whether OopsType hides the built-in Windows language indicator. Seeded from the live
+    /// registry state (like <see cref="Autostart"/>) and applied via <see cref="ILanguageBarService"/>.</summary>
+    public bool HideLanguageBar { get => _hideLanguageBar; set => SetProperty(ref _hideLanguageBar, value); }
+
     // ---- About ----
     // Read once from the running assembly so the metadata baked in by the .csproj (<Version>,
     // <Copyright>) is the single source of truth — the About card never hardcodes a version.
@@ -713,6 +720,7 @@ public sealed class SettingsViewModel : BindableBase
         _idleTarget = s.IdleReset.TargetLang;
 
         _autostart = _startup.IsEnabled();
+        _hideLanguageBar = _languageBar.IsHidden();
     }
 
     /// <summary>
@@ -795,6 +803,7 @@ public sealed class SettingsViewModel : BindableBase
         s.IdleReset.TargetLang = (IdleTarget ?? "en").ToLowerInvariant();
 
         s.General.Autostart = Autostart;
+        s.General.HideWindowsLanguageBar = HideLanguageBar;
 
         // Persist the chosen language code (not the whole pack — only the code is stable across
         // disk/runtime) and switch the active translation dictionary immediately so the user
@@ -810,6 +819,7 @@ public sealed class SettingsViewModel : BindableBase
 
         _settings.Save();
         _startup.SetEnabled(Autostart);
+        _languageBar.SetHidden(HideLanguageBar);
 
         IsDirty = false;
     }

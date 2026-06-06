@@ -1165,6 +1165,18 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Hide the Windows language indicator: opt-in, drives ILanguageBarService
+                             (registry CTF\LangBar\ShowStatus + live TSF ShowFloating). -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <ui:ToggleSwitch Content="{loc:T General_HideLangBar}"
+                                                 IsChecked="{Binding HideLanguageBar}"
+                                                 ToolTip="{loc:T General_HideLangBar_Tooltip}"/>
+                                <TextBlock Style="{StaticResource FieldHint}"
+                                           Text="{loc:T General_HideLangBar_Hint}"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Language picker: ItemsSource is populated dynamically from JSON files
                              discovered under Languages\, so adding a new file ⇒ new combo entry. -->
                         <Border Style="{StaticResource Card}">
