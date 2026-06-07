@@ -89,17 +89,18 @@ public abstract class OverlayWindowBase : Window
     }
 
     /// <summary>
-    /// Place the window directly BEHIND the taskbar in Z-order, so the taskbar's Win11 translucency
-    /// shows the strip's color through it. The window stays topmost (the taskbar is itself topmost):
-    /// inserting right after the taskbar keeps the strip in the topmost band but below the taskbar,
-    /// which means no ordinary window can wedge itself between the two. Without this — i.e. if the
-    /// strip were merely non-topmost — any window the user drags low enough would slide on top of it.
+    /// Place the window directly BEHIND the given taskbar in Z-order, so the taskbar's Win11
+    /// translucency shows the strip's color through it. The window stays topmost (the taskbar is
+    /// itself topmost): inserting right after the taskbar keeps the strip in the topmost band but
+    /// below the taskbar, which means no ordinary window can wedge itself between the two. Without
+    /// this — i.e. if the strip were merely non-topmost — any window the user drags low enough
+    /// would slide on top of it. The caller passes the specific taskbar HWND to anchor against, so
+    /// strips on secondary monitors sit behind their own taskbar rather than the primary one.
     /// </summary>
-    public void EnsureBehindTaskbar()
+    public void EnsureBehindTaskbar(IntPtr taskbar)
     {
         if (_hwnd == IntPtr.Zero) return;
 
-        var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
         if (taskbar == IntPtr.Zero)
         {
             // No taskbar to anchor against — fall back to plain topmost so the strip stays visible.
