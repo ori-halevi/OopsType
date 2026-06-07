@@ -1165,15 +1165,21 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Hide the Windows language indicator: opt-in, drives ILanguageBarService
-                             (registry CTF\LangBar\ShowStatus + live TSF ShowFloating). -->
+                        <!-- In-app guide for removing the Windows taskbar language indicator.
+                             Instructions only — Windows doesn't let an app do these steps reliably. -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <ui:ToggleSwitch Content="{loc:T General_HideLangBar}"
-                                                 IsChecked="{Binding HideLanguageBar}"
-                                                 ToolTip="{loc:T General_HideLangBar_Tooltip}"/>
-                                <TextBlock Style="{StaticResource FieldHint}"
-                                           Text="{loc:T General_HideLangBar_Hint}"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T HideLangBar_Title}"/>
+                                <TextBlock Style="{StaticResource FieldHint}" TextWrapping="Wrap"
+                                           Text="{loc:T HideLangBar_Intro}" Margin="0,4,0,10"/>
+                                <TextBlock Style="{StaticResource FieldHint}" TextWrapping="Wrap"
+                                           Text="{loc:T HideLangBar_Step1}" Margin="0,0,0,6"/>
+                                <TextBlock Style="{StaticResource FieldHint}" TextWrapping="Wrap"
+                                           Text="{loc:T HideLangBar_Step2}" Margin="0,0,0,6"/>
+                                <TextBlock Style="{StaticResource FieldHint}" TextWrapping="Wrap"
+                                           Text="{loc:T HideLangBar_Step3}" Margin="0,0,0,10"/>
+                                <TextBlock Style="{StaticResource FieldHint}" TextWrapping="Wrap"
+                                           Text="{loc:T HideLangBar_Note}"/>
                             </StackPanel>
                         </Border>
 
