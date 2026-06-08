@@ -16,6 +16,8 @@
 ![License](https://img.shields.io/badge/License-Apache%202.0-1F8B4C)
 ![No telemetry](https://img.shields.io/badge/Telemetry-none-success)
 
+### [⬇️ הורדה / Download](https://github.com/ori-halevi/OopsType/releases)
+
 📖 [עברית](#-עברית) · [English](#-english)
 
 <br/>
@@ -60,7 +62,17 @@ OopsType כולל **ארבע שכבות־על עצמאיות** — מדליקי�
 
 ### 🚀 התקנה
 
-**דרישות:** Windows 10 / 11 · [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (או build עצמאי, ראה למטה).
+#### ⬇️ הורדה מהירה *(מומלץ)*
+
+1. גשו ל־[**עמוד ה־Releases**](https://github.com/ori-halevi/OopsType/releases).
+2. הורידו את ה־`OopsType.exe` מהשחרור האחרון.
+3. הפעילו בלחיצה כפולה. זהו — אין מתקין, אין התקנות נלוות, אייקון קטן פשוט מופיע במגש המערכת.
+
+> 💡 ה־`.exe` שמשוחרר הוא קובץ יחיד ועצמאי (self-contained) — לא צריך להתקין שום דבר נוסף, גם לא את ה־.NET Runtime.
+
+#### 🛠️ מהקוד
+
+**דרישות:** Windows 10 / 11 · [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0).
 
 מתוך הקוד:
 
@@ -141,7 +153,17 @@ Also respects cursor-hide events (video players, touch input) — when Windows h
 
 ### Installing
 
-**Requirements:** Windows 10 / 11 · [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (or build self-contained, see below).
+#### ⬇️ Quick download *(recommended)*
+
+1. Head to the [**Releases page**](https://github.com/ori-halevi/OopsType/releases).
+2. Download `OopsType.exe` from the latest release.
+3. Double-click to run. That's it — no installer, no setup, just a small icon in your system tray.
+
+> 💡 The released `.exe` is a single, self-contained file — you don't need to install anything else, not even the .NET runtime.
+
+#### 🛠️ From source
+
+**Requirements:** Windows 10 / 11 · [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0).
 
 From source:
 ```powershell
