@@ -38,6 +38,8 @@
 
 ## 🇮🇱 עברית
 
+> ♻️ **OopsType הוא היורש של [taskbar-color-change-by-lang](https://github.com/ori-halevi/taskbar-color-change-by-lang)** — כתיבה מחדש מאפס שלוקחת את הרעיון של "צבע בשורת המשימות לפי שפה" והופכת אותו לכלי שלם: לא רק פס בשורת המשימות, אלא גם תווית ליד הסמן, תווית שעוקבת אחרי העכבר, איפוס אוטומטי בחוסר פעילות, וממשק רב־לשוני.
+
 ### למה זה קיים
 
 כמה פעמים זה קרה לך? את/ה לוחצ/ת על תיבת טקסט, מקליד/ה משפט שלם, מרים/ה את העיניים — וכל הפסקה יצאה ג׳יבריש, כי כל הזמן הזה היית בפריסת מקלדת לא נכונה. אז מוחקים, מחליפים שפה, ומקלידים הכול מחדש. שוב.
@@ -118,6 +120,8 @@ OopsType מגלה חבילות שפה בהפעלה משתי תיקיות: `<תי
 <a name="-english"></a>
 
 ## 🇬🇧 English
+
+> ♻️ **OopsType is the successor to [taskbar-color-change-by-lang](https://github.com/ori-halevi/taskbar-color-change-by-lang)** — a from-scratch rewrite that takes the "color the taskbar by language" idea and grows it into a complete tool: not just a taskbar strip, but a caret label, a mouse-following label, idle reset, and a multi-language UI.
 
 **OopsType** is a lightweight Windows tray utility that gives you an unmissable, glanceable indication of your active keyboard layout — exactly where your eyes already are. No more typing a full sentence before realizing you were in the wrong layout the whole time.
 
