@@ -55,6 +55,12 @@ public abstract class OverlayWindowBase : Window
             | NativeMethods.WS_EX_NOACTIVATE;
         NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, ex);
 
+        // Keep the overlay drawn during Aero Peek — taskbar thumbnail previews and the
+        // "peek at desktop" button — which otherwise fade every top-level window (ours included)
+        // to a glass outline. This is a different mechanism from Show Desktop (Win+D), which is
+        // handled separately via the SWP_HIDEWINDOW guard in WndProc.
+        NativeMethods.ExcludeFromPeek(_hwnd);
+
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
     }
 

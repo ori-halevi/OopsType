@@ -60,6 +60,12 @@ internal static class NativeMethods
     public const uint LOCALE_SISO639LANGNAME = 0x0059;
     public const uint LOCALE_SENGLISHLANGUAGENAME = 0x1001;
 
+    // ---- DWM (Aero Peek) ----
+    // Setting this attribute to TRUE keeps a window drawn during Aero Peek — both the taskbar
+    // thumbnail previews and the "peek at desktop" button. Without it DWM fades every top-level
+    // window (ours included) to a glass outline during the peek, so the overlay vanishes.
+    public const int DWMWA_EXCLUDED_FROM_PEEK = 12;
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -219,8 +225,24 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
     public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+    // ---- dwmapi ----
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute,
+        ref int pvAttribute, int cbAttribute);
+
     // ---- helpers ----
     public static int LangIdFromHkl(IntPtr hkl) => (int)((long)hkl & 0xFFFF);
+
+    // Ask DWM to keep this window visible during Aero Peek (taskbar thumbnail previews and the
+    // "peek at desktop" button), which otherwise fades every top-level window to a glass outline
+    // and makes the overlay disappear. Best-effort: if DWM composition is off the call just fails
+    // and we fall back to the OS default, so the result is ignored.
+    public static void ExcludeFromPeek(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int enabled = 1;  // BOOL TRUE
+        DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, ref enabled, sizeof(int));
+    }
 
     // True only when the cursor is actually being drawn on screen. Returns false for both
     // ShowCursor(FALSE) (video players' auto-hide) and CURSOR_SUPPRESSED (touch/pen input).
