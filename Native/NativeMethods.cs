@@ -40,6 +40,18 @@ internal static class NativeMethods
     public const int WH_MOUSE_LL = 14;
     public const int WM_MOUSEMOVE = 0x0200;
 
+    // ---- Raw input ----
+    // Used to observe mouse motion WITHOUT a WH_MOUSE_LL hook. A low-level hook sits in the
+    // critical path of every mouse event — the OS waits for the callback before moving the visible
+    // cursor, so under load the pointer stutters. Raw input is a passive, asynchronous notification:
+    // the system moves the cursor immediately and merely posts us WM_INPUT, so it can never freeze
+    // the pointer. RIDEV_INPUTSINK delivers even when our (hidden) window isn't in the foreground.
+    public const int WM_INPUT = 0x00FF;
+    public const ushort HID_USAGE_PAGE_GENERIC = 0x01;
+    public const ushort HID_USAGE_GENERIC_MOUSE = 0x02;
+    public const uint RIDEV_REMOVE = 0x00000001;
+    public const uint RIDEV_INPUTSINK = 0x00000100;
+
     // ---- Cursor visibility ----
     public const uint CURSOR_SHOWING = 0x00000001;
     public const uint CURSOR_SUPPRESSED = 0x00000002;
@@ -97,6 +109,15 @@ internal static class NativeMethods
         public uint flags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAWINPUTDEVICE
+    {
+        public ushort usUsagePage;
+        public ushort usUsage;
+        public uint dwFlags;
+        public IntPtr hwndTarget;
     }
 
     public delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
@@ -184,6 +205,11 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RegisterRawInputDevices(
+        [In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
 
     // ---- kernel32 ----
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

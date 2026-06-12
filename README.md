@@ -253,12 +253,12 @@ Services/
 │                                   raises LanguageChanged for WinForms-side consumers (tray menu)
 └── Overlays/
     ├── CaretOverlayPresenter         ── owns + positions caret chip; 120 ms follow loop
-    ├── MouseOverlayPresenter         ── hook-wakes-Rendering pattern (see file header)
+    ├── MouseOverlayPresenter         ── rawinput-wakes-Rendering pattern (see file header)
     └── TaskbarStripOverlayPresenter  ── repositions on heartbeat when the taskbar moves
 
 Native/
 ├── LowLevelKeyboardHook        ── WH_KEYBOARD_LL
-├── LowLevelMouseHook           ── WH_MOUSE_LL
+├── MouseMotionWatcher          ── WM_INPUT raw input (passive; never gates the system cursor)
 ├── WinEventHook                ── SetWinEventHook for foreground/focus
 └── NativeMethods               ── all P/Invoke signatures
 
@@ -271,7 +271,7 @@ Infrastructure/                  ── ILogger, IErrorReporter, IToastService, 
 - **No main window.** Every window — overlays and the settings dialog — is created on demand. `App.CreateShell()` returns `null` and `ShutdownMode="OnExplicitShutdown"` keeps the process alive in the tray.
 - **One shared heartbeat.** `OverlayCoordinator` runs a single 1.5 s `DispatcherTimer` and ticks all three presenters, instead of each owning its own. Keeps idle CPU near zero.
 - **Hook callbacks never throw.** Every low-level hook delegate is wrapped in `Safe.Invoke` so a buggy subscriber can't degrade the global hook chain (Windows enforces `LowLevelHooksTimeout` — a slow callback gets you uninstalled).
-- **Mouse overlay: hook-wakes-Rendering.** The cursor-follow chip used to run on a 40 Hz `DispatcherTimer`, which produced visible jitter because it wasn't synchronized to the WPF compositor. Now a low-level mouse hook just marks "moved" and subscribes the window to `CompositionTarget.Rendering`; window moves happen once per frame, frame-synchronous. After 150 ms idle the Rendering subscription is dropped — true zero-work idle.
+- **Mouse overlay: rawinput-wakes-Rendering.** The cursor-follow chip used to run on a 40 Hz `DispatcherTimer`, which produced visible jitter because it wasn't synchronized to the WPF compositor. Now a raw-input watcher (`WM_INPUT`) just marks "moved" and subscribes the window to `CompositionTarget.Rendering`; window moves happen once per frame, frame-synchronous. After 150 ms idle the Rendering subscription is dropped — true zero-work idle. Raw input is used instead of a `WH_MOUSE_LL` hook on purpose: a low-level hook sits in the critical path of every mouse event (the OS waits for the callback before moving the visible cursor), so under load it stutters the *system* pointer; raw input only observes and can never freeze it.
 - **Crash-resilient settings I/O.** `SettingsService.WriteToDisk` writes to `settings.json.tmp` then atomically `File.Move(..., overwrite: true)` so a crash mid-write can't leave a truncated config.
 - **Global exception handlers.** `App.WireGlobalExceptionHandlers` catches `DispatcherUnhandledException`, `AppDomain.UnhandledException`, and `TaskScheduler.UnobservedTaskException`. Errors are logged AND surfaced as a tray toast — silent failures in a long-running utility are the worst kind.
 
@@ -290,7 +290,7 @@ No telemetry. No network calls. No third-party services. Everything runs locally
 Issues and PRs are welcome at [github.com/ori-halevi/OopsType](https://github.com/ori-halevi/OopsType). A few notes:
 
 - The codebase favors small, single-responsibility classes coordinated through interfaces — please keep that style when adding features.
-- Anything running on a hook callback thread (`LowLevelKeyboardHook`, `LowLevelMouseHook`, `WinEventHook`) **must** be wrapped in `Safe.Invoke` and must do the minimum amount of work possible.
+- Anything running on a hook/watcher callback thread (`LowLevelKeyboardHook`, `MouseMotionWatcher`, `WinEventHook`) **must** be wrapped in `Safe.Invoke` and must do the minimum amount of work possible.
 - New settings go into `Models/AppSettings.cs`; per-feature defaults belong in `SettingsService.ApplyFirstRunDefaults` if they should adapt to system state.
 
 ### License

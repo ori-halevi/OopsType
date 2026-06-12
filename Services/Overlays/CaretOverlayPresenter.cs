@@ -1,7 +1,9 @@
 using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using OopsType.Infrastructure;
+using OopsType.Models;
 using OopsType.ViewModels;
 using OopsType.Views;
 
@@ -10,6 +12,15 @@ namespace OopsType.Services.Overlays;
 /// <summary>
 /// Presenter for the "caret label" overlay — a small floating chip pinned above the text caret
 /// of whichever app currently has focus. Hidden when no caret is detectable.
+///
+/// <para><b>Threading:</b> resolving the caret rect goes through UI Automation, a cross-process COM
+/// call that <i>can block for seconds</i> when the focused app is busy. Running it on the UI thread
+/// would stall every overlay's per-frame work — and, because the mouse hook used to share that
+/// thread, froze the whole system's pointer under load. So the query runs on a dedicated MTA worker
+/// (<see cref="CaretWorkerLoop"/>, the apartment UI Automation clients are meant to use); the worker
+/// hands the plain-value <see cref="CaretInfo"/> back to the UI thread, which does only the cheap
+/// positioning. The follow timer and keypresses merely <see cref="SignalQuery">wake the worker</see>,
+/// and the <see cref="AutoResetEvent"/> coalesces a burst into a single query.</para>
 /// </summary>
 public sealed class CaretOverlayPresenter : IOverlayPresenter
 {
@@ -34,8 +45,12 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     private CaretLabelViewModel? _viewModel;
     private DispatcherTimer? _followTimer;
 
-    // Coalesces a burst of keypresses into a single deferred UpdatePosition — see OnKeyPressed.
-    private bool _keyUpdateQueued;
+    // Dedicated MTA worker that runs the (potentially blocking) UI Automation query off the UI
+    // thread, plus the signal that wakes it and the UI dispatcher it marshals results back onto.
+    private Thread? _worker;
+    private AutoResetEvent? _workSignal;
+    private volatile bool _workerStop;
+    private Dispatcher? _dispatcher;
 
     public CaretOverlayPresenter(
         ISettingsService settings,
@@ -54,7 +69,7 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _vmFactory = vmFactory;
         _viewFactory = viewFactory;
 
-        // Re-position immediately on every keypress so the chip "snaps" to the caret as you type.
+        // Re-position on every keypress so the chip "snaps" to the caret as you type.
         _activity.KeyPressed += OnKeyPressed;
     }
 
@@ -72,28 +87,13 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
     }
 
     /// <summary>
-    /// KeyPressed fires synchronously from inside the LL keyboard hook callback. UpdatePosition
-    /// calls into UI Automation (cross-process COM) which can block for seconds when a target
-    /// app is unresponsive. If we ran it on the hook thread, blowing the LowLevelHooksTimeout
-    /// (~300ms) would cause Windows to silently unhook us — killing all keyboard tracking
-    /// permanently with no recovery. We defer the work to the dispatcher so the hook callback
-    /// returns to the OS in microseconds, and coalesce concurrent posts so a fast typist doesn't
-    /// flood the queue.
+    /// KeyPressed fires synchronously from inside the LL keyboard hook callback. Keep it trivial:
+    /// just wake the UIA worker. The cross-process query then runs on that worker — never on the
+    /// hook thread (a slow call there would blow LowLevelHooksTimeout and get us unhooked) nor on
+    /// the UI thread (which it would stall). The AutoResetEvent coalesces a fast typist's burst into
+    /// a single query.
     /// </summary>
-    private void OnKeyPressed()
-    {
-        if (_overlay == null || _keyUpdateQueued) return;
-
-        var dispatcher = _overlay.Dispatcher ?? Application.Current?.Dispatcher;
-        if (dispatcher == null) return;
-
-        _keyUpdateQueued = true;
-        dispatcher.BeginInvoke(new Action(() =>
-        {
-            _keyUpdateQueued = false;
-            Safe.Invoke(_reporter, "CaretOverlayPresenter.OnKeyPressed", UpdatePosition);
-        }), DispatcherPriority.Background);
-    }
+    private void OnKeyPressed() => SignalQuery();
 
     private void EnsureCreated()
     {
@@ -108,10 +108,13 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         // otherwise (the offscreen sentinel set by OverlayWindowBase).
         _overlay.Visibility = Visibility.Hidden;
         _overlay.EnsureTopmost();
-        UpdatePosition();
+
+        _dispatcher = _overlay.Dispatcher;
+        StartWorker();
+        SignalQuery();  // initial position (resolved off-thread, applied back on the UI thread)
 
         _followTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = FollowInterval };
-        _followTimer.Tick += (_, _) => Safe.Invoke(_reporter, "CaretOverlayPresenter.FollowTick", UpdatePosition);
+        _followTimer.Tick += (_, _) => SignalQuery();
         _followTimer.Start();
     }
 
@@ -122,6 +125,9 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _followTimer?.Stop();
         _followTimer = null;
 
+        StopWorker();
+        _dispatcher = null;
+
         _overlay.Close();
         _overlay = null;
 
@@ -129,11 +135,79 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         _viewModel = null;
     }
 
-    private void UpdatePosition()
+    private void StartWorker()
+    {
+        _workerStop = false;
+        _workSignal = new AutoResetEvent(false);
+        _worker = new Thread(CaretWorkerLoop)
+        {
+            IsBackground = true,
+            Name = "OopsType.CaretUia",
+        };
+        // UI Automation clients are meant to call from an MTA thread, not the app's STA UI thread.
+        _worker.SetApartmentState(ApartmentState.MTA);
+        _worker.Start();
+    }
+
+    private void StopWorker()
+    {
+        var worker = _worker;
+        var signal = _workSignal;
+
+        _workerStop = true;
+        signal?.Set();
+
+        // Only dispose the signal once the worker has actually exited. If it's mid-query (UIA can
+        // block for seconds) the Join times out; the worker is a background thread that re-checks
+        // _workerStop right after its WaitOne and exits on its own. Disposing the signal out from
+        // under a live worker would throw on its next WaitOne and take the process down, so we leak
+        // the one handle (reclaimed at process exit) rather than risk that.
+        if (worker != null && worker.Join(TimeSpan.FromSeconds(2)))
+        {
+            signal?.Dispose();
+            _workSignal = null;
+        }
+
+        _worker = null;
+    }
+
+    private void SignalQuery() => _workSignal?.Set();
+
+    /// <summary>
+    /// Runs on the dedicated MTA worker thread. Blocks on the signal, runs the (possibly slow) UI
+    /// Automation query when woken, and marshals the plain-value result back to the UI thread.
+    /// </summary>
+    private void CaretWorkerLoop()
+    {
+        var signal = _workSignal;
+        if (signal == null) return;
+
+        while (true)
+        {
+            signal.WaitOne();
+            if (_workerStop) return;
+
+            CaretInfo info;
+            try
+            {
+                info = _caret.GetCaretRect();
+            }
+            catch (Exception ex)
+            {
+                _reporter.Report("CaretOverlayPresenter.CaretWorker", ex);
+                continue;
+            }
+
+            // CaretInfo is a pure value (bool + Rect + enum) — nothing UIA-bound crosses threads.
+            _dispatcher?.BeginInvoke(new Action(() => ApplyCaretInfo(info)));
+        }
+    }
+
+    /// <summary>Positions the overlay from an already-resolved caret rect. UI thread only.</summary>
+    private void ApplyCaretInfo(CaretInfo info)
     {
         if (_overlay == null) return;
 
-        var info = _caret.GetCaretRect();
         if (!info.Found)
         {
             if (_overlay.Visibility == Visibility.Visible)

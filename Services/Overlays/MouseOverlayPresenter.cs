@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -14,18 +15,19 @@ namespace OopsType.Services.Overlays;
 /// Presenter for the "mouse label" overlay — a chip that follows the mouse cursor.
 ///
 /// Architecture (see <c>MouseLabel_Overlay_Optimization_Spec.md</c>):
-///   1. A global low-level mouse hook (<see cref="LowLevelMouseHook"/>) reports cursor motion.
-///      Its only job is to mark "the cursor moved" and wake the render loop. Event-driven, so
-///      zero work when the cursor is idle.
+///   1. A raw-input <see cref="MouseMotionWatcher"/> reports cursor motion. Its only job is to mark
+///      "the cursor moved" and wake the render loop. Event-driven, so zero work when the cursor is
+///      idle. (It deliberately does NOT use a WH_MOUSE_LL hook — that would sit in the critical path
+///      of every mouse event and stutter the system pointer under load; raw input only observes.)
 ///   2. The actual window move happens inside <see cref="CompositionTarget.Rendering"/> — once
 ///      per WPF frame, synchronized with the compositor. This is what eliminates the jitter the
 ///      previous 40Hz DispatcherTimer produced.
 ///   3. After <see cref="IdleTimeout"/> without motion we unsubscribe from Rendering and return
 ///      to true idle (no per-frame tick). The next hook event re-subscribes.
 ///
-/// The hook callback must NEVER move the window itself — that would happen on the hook thread's
-/// schedule, not synchronized to a frame, reintroducing the jitter. Hook only wakes; Rendering
-/// moves.
+/// The motion callback must NEVER move the window itself — that would happen on the watcher
+/// thread's schedule, not synchronized to a frame, reintroducing the jitter. The watcher only
+/// wakes; Rendering moves.
 ///
 /// Cursor-visibility handling: when the OS hides the cursor (video player auto-hide, touch/pen
 /// input), the label must hide too. During motion, <see cref="UpdatePosition"/> already calls
@@ -36,8 +38,13 @@ namespace OopsType.Services.Overlays;
 /// the first of (a) cursor seen hidden — overlay collapsed, nothing more to do until the next
 /// move, (b) <see cref="CursorVisibilityPollDuration"/> elapsed with the cursor still visible —
 /// we accept the rare miss where a video player hides the cursor much later than expected, or
-/// (c) motion resumes (<see cref="EnsureSubscribed"/> stops the timer). The visibility-poll
+/// (c) motion resumes (<see cref="SubscribeOnUi"/> stops the timer). The visibility-poll
 /// constants are intentionally not user-configurable.
+///
+/// Threading: the motion callback (<see cref="OnMouseMoved"/>) runs on the watcher's dedicated
+/// pump thread, never the UI thread. It only stamps the move time and posts a single subscribe
+/// request to the UI thread; all window movement and Rendering (un)subscription happen on the UI
+/// thread.
 /// </summary>
 public sealed class MouseOverlayPresenter : IOverlayPresenter
 {
@@ -64,12 +71,26 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
     private MouseLabelOverlay? _overlay;
     private MouseLabelViewModel? _viewModel;
-    private LowLevelMouseHook? _hook;
+    private MouseMotionWatcher? _motion;
     private DispatcherTimer? _visibilityPollTimer;
     private long _visibilityPollStartTicks;
 
+    // Actual CompositionTarget.Rendering subscription state. Touched only on the UI thread.
     private bool _renderingSubscribed;
+
+    // Cross-thread coalescing guard for the hook→UI wake. 0 = idle, no wake outstanding; 1 = a wake
+    // has been posted or we are already following. The hook thread flips 0→1 and posts exactly one
+    // BeginInvoke per motion burst; the UI thread resets it to 0 only when it returns to idle, so a
+    // stream of moves during active following never floods the dispatcher.
+    private int _wakeRequested;
+
+    // Stopwatch timestamp of the last mouse move. Written on the hook thread, read on the UI thread
+    // — go through Interlocked/Volatile so the reader never sees a torn or stale value.
     private long _lastMoveTicks;
+
+    // UI dispatcher captured at creation; the hook thread marshals subscription onto it.
+    private Dispatcher? _dispatcher;
+
     private bool _maxSmoothness;
 
     public MouseOverlayPresenter(
@@ -99,7 +120,13 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         // In max-smoothness mode we hold the Rendering subscription permanently so the very
         // first frame of motion has zero re-subscribe latency. In economy mode we leave it to
         // the hook to wake us.
-        if (_maxSmoothness) EnsureSubscribed();
+        if (_maxSmoothness)
+        {
+            // Pin the coalescing guard so the hook never posts a (redundant) wake while we already
+            // hold a permanent subscription.
+            Interlocked.Exchange(ref _wakeRequested, 1);
+            SubscribeOnUi();
+        }
     }
 
     public void Heartbeat() => _overlay?.EnsureTopmost();
@@ -114,11 +141,15 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         _overlay.Show();
         _overlay.EnsureTopmost();
 
+        // Capture the UI dispatcher before wiring the hook, so the hook thread always has a valid
+        // target to marshal subscription onto once events start firing.
+        _dispatcher = _overlay.Dispatcher;
+
         _lastMoveTicks = Stopwatch.GetTimestamp();
         UpdatePosition();
 
-        _hook = new LowLevelMouseHook(_reporter);
-        _hook.MouseMoved += OnMouseMoved;
+        _motion = new MouseMotionWatcher(_reporter);
+        _motion.MouseMoved += OnMouseMoved;
     }
 
     private void EnsureDestroyed()
@@ -126,18 +157,25 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         if (_overlay == null) return;
 
         StopVisibilityPoll();
+
+        // Tear the watcher down first so no further wakes are posted. Dispose joins its pump
+        // thread, so OnMouseMoved cannot run after this returns; any BeginInvoke it already queued
+        // will no-op once _overlay is null (this method runs to completion on the UI thread before
+        // any queued continuation can).
+        if (_motion != null)
+        {
+            _motion.MouseMoved -= OnMouseMoved;
+            _motion.Dispose();
+            _motion = null;
+        }
+
         if (_renderingSubscribed)
         {
             CompositionTarget.Rendering -= OnRendering;
             _renderingSubscribed = false;
         }
-
-        if (_hook != null)
-        {
-            _hook.MouseMoved -= OnMouseMoved;
-            _hook.Dispose();
-            _hook = null;
-        }
+        Interlocked.Exchange(ref _wakeRequested, 0);
+        _dispatcher = null;
 
         _overlay.Close();
         _overlay = null;
@@ -146,27 +184,45 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         _viewModel = null;
     }
 
-    // Runs on the thread that installed the hook (the WPF UI thread — the hook is installed in
-    // EnsureCreated). Must stay trivial: Windows enforces LowLevelHooksTimeout and a slow callback
-    // degrades mouse responsiveness system-wide. The hook itself already swallows our throws,
-    // but assigning to _lastMoveTicks and calling EnsureSubscribed are infallible.
+    // Runs on the watcher's dedicated pump thread (see MouseMotionWatcher), NOT the UI thread.
+    // Raw input does not gate the system cursor, so this is never in the pointer's critical path;
+    // we keep it trivial anyway. We only stamp the move time and, on the transition out of idle,
+    // post a single subscribe request to the UI thread. The CompareExchange guarantees exactly one
+    // BeginInvoke per motion burst — without it, a stream of high-frequency moves before the UI
+    // thread flips _renderingSubscribed would each queue a redundant dispatcher item.
     private void OnMouseMoved()
     {
-        _lastMoveTicks = Stopwatch.GetTimestamp();
-        EnsureSubscribed();
+        Interlocked.Exchange(ref _lastMoveTicks, Stopwatch.GetTimestamp());
+        if (Interlocked.CompareExchange(ref _wakeRequested, 1, 0) == 0)
+            _dispatcher?.BeginInvoke(new Action(SubscribeOnUi));
     }
 
-    private void EnsureSubscribed()
+    // UI thread only (the dispatcher the hook marshals to, or a direct call in max-smoothness).
+    private void SubscribeOnUi()
     {
-        if (_renderingSubscribed) return;
+        if (_overlay == null || _renderingSubscribed) return;
         _renderingSubscribed = true;
         StopVisibilityPoll();
         CompositionTarget.Rendering += OnRendering;
     }
 
-    private void EnsureUnsubscribed()
+    // UI thread only. Drops the per-frame tick and returns to rest, with a race-closing re-check.
+    private void UnsubscribeOnUi()
     {
         if (!_renderingSubscribed) return;
+
+        // Clear the coalescing guard BEFORE the final freshness re-check. This closes the tiny race
+        // with the hook thread: a move that lands right after the idle check either (a) updated the
+        // timestamp before our re-read — we see it's fresh and stay subscribed — or (b) lands after,
+        // in which case its CompareExchange now succeeds (guard is 0) and posts a fresh wake that
+        // re-subscribes us. Either way a just-resumed motion is never silently dropped.
+        Interlocked.Exchange(ref _wakeRequested, 0);
+        if (Stopwatch.GetElapsedTime(Volatile.Read(ref _lastMoveTicks)) <= IdleTimeout)
+        {
+            Interlocked.Exchange(ref _wakeRequested, 1);
+            return;
+        }
+
         _renderingSubscribed = false;
         CompositionTarget.Rendering -= OnRendering;
         StartVisibilityPoll();
@@ -183,8 +239,8 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
 
             if (_maxSmoothness) return;
 
-            if (Stopwatch.GetElapsedTime(_lastMoveTicks) > IdleTimeout)
-                EnsureUnsubscribed();
+            if (Stopwatch.GetElapsedTime(Volatile.Read(ref _lastMoveTicks)) > IdleTimeout)
+                UnsubscribeOnUi();
         }
         catch (Exception ex)
         {
