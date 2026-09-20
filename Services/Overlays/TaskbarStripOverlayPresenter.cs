@@ -131,6 +131,18 @@ public sealed class TaskbarStripOverlayPresenter : IOverlayPresenter
             overlay.SetVisible(true);
 
         // "behind" relies on the Win11 acrylic letting the strip's color bleed through.
+        //
+        // KNOWN, ACCEPTED: with "behind", the strip lags up to one heartbeat (~1.5s) behind the
+        // taskbar when an app goes full-screen. The shell quietly drops Shell_TrayWnd out of the
+        // topmost band; nothing notifies us, so the strip stays topmost — i.e. over the video —
+        // until the next Sync re-anchors it after the (now non-topmost) taskbar, which is what
+        // finally demotes it. Do NOT "fix" this:
+        //   * shortening the heartbeat only shrinks the lag (never removes it) while tripling a
+        //     poll that runs 24/7;
+        //   * re-syncing off the existing EVENT_SYSTEM_FOREGROUND hook races the shell — the
+        //     demotion often lands after the foreground event, so we'd re-anchor too early, gain
+        //     nothing, and churn Z-order on every Alt-Tab.
+        // Cosmetic, sub-2s, self-correcting. Leave it alone.
         var behind = string.Equals(settings.Placement, "behind", StringComparison.OrdinalIgnoreCase);
         if (behind) overlay.EnsureBehindTaskbar(tb.Hwnd);
         else overlay.EnsureTopmost();

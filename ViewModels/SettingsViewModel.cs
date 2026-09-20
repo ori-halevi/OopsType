@@ -6,6 +6,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -14,6 +16,7 @@ using OopsType.Models;
 using OopsType.Models.Localization;
 using OopsType.Services;
 using OopsType.Services.Localization;
+using OopsType.Services.TextFix;
 using Prism.Commands;
 using Prism.Mvvm;
 
@@ -49,6 +52,7 @@ public sealed class SettingsViewModel : BindableBase
         LoadFromSettings();
 
         LanguageOptions = BuildLanguageOptions();
+        RefreshConvertPreview();
 
         SaveCommand = new DelegateCommand(Apply, () => IsDirty).ObservesProperty(() => IsDirty);
         DiscardCommand = new DelegateCommand(Discard, () => IsDirty).ObservesProperty(() => IsDirty);
@@ -508,6 +512,110 @@ public sealed class SettingsViewModel : BindableBase
     private string _idleTarget;
     public string IdleTarget { get => _idleTarget; set => SetProperty(ref _idleTarget, value); }
 
+    // ---- Convert selection ----
+    private bool _convertEnabled;
+    public bool ConvertEnabled { get => _convertEnabled; set => SetProperty(ref _convertEnabled, value); }
+
+    private int _convertMaxLength;
+    // Floor at 10 (below that the feature can only ever fix a single word, which is not worth the
+    // risk budget) and cap at 2000 — past that the "user could not undo this by hand" argument the
+    // cap exists for stops holding at all.
+    public int ConvertMaxLength
+    {
+        get => _convertMaxLength;
+        set => SetProperty(ref _convertMaxLength, Math.Clamp(value, 10, 2000));
+    }
+
+    private bool _convertBlockMultiline;
+    public bool ConvertBlockMultiline { get => _convertBlockMultiline; set => SetProperty(ref _convertBlockMultiline, value); }
+
+    private bool _convertReselect;
+    public bool ConvertReselect { get => _convertReselect; set => SetProperty(ref _convertReselect, value); }
+
+    private bool _convertShowChip;
+    public bool ConvertShowChip { get => _convertShowChip; set => SetProperty(ref _convertShowChip, value); }
+
+    private string _convertPreviewFrom = "";
+    /// <summary>Left-hand side of the settings preview: the sample phrase as it comes out when typed
+    /// on the WRONG layout.</summary>
+    public string ConvertPreviewFrom { get => _convertPreviewFrom; private set => SetProperty(ref _convertPreviewFrom, value); }
+
+    private string _convertPreviewTo = "";
+    /// <summary>Right-hand side of the settings preview: the same phrase, correct.</summary>
+    public string ConvertPreviewTo { get => _convertPreviewTo; private set => SetProperty(ref _convertPreviewTo, value); }
+
+    /// <summary>
+    /// Builds the preview by running the real transposition engine over the user's actually-installed
+    /// layouts, rather than printing a canned before/after pair.
+    ///
+    /// <para>That makes the preview a self-test: it demonstrates the feature AND proves the engine
+    /// mapped this machine's layout pair. If it ever shows something nonsensical, the user learns
+    /// immediately that conversion will not work for them — which a hardcoded sample could never
+    /// reveal. The canned pair is kept only as a fallback for when no usable pair of layouts exists.</para>
+    /// </summary>
+    private void RefreshConvertPreview()
+    {
+        var phrase = _localization.T("Convert_SampleTo");
+
+        // Show the canned pair straight away; the computed half replaces it if the engine succeeds.
+        ConvertPreviewTo = phrase;
+        ConvertPreviewFrom = _localization.T("Convert_SampleFrom");
+
+        // Reading the installed layouts is a plain P/Invoke and safe here.
+        IReadOnlyList<LanguageInfo> installed;
+        try
+        {
+            installed = _layout.GetInstalledLayouts();
+        }
+        catch (Exception ex)
+        {
+            _reporter.Report("SettingsViewModel.ConvertPreview", ex);
+            return;
+        }
+
+        // LayoutTransposer runs hundreds of ToUnicodeEx calls and mutates the CALLING thread's
+        // dead-key state — its own contract forbids doing that on a thread handling real keystrokes,
+        // and this one owns the app's low-level keyboard hook. Off-thread it goes; the result is a
+        // plain string, so only the assignment needs to come back.
+        Task.Run(() => ComputeTypedWrong(phrase, installed))
+            .ContinueWith(
+                t => { if (!string.IsNullOrEmpty(t.Result)) ConvertPreviewFrom = t.Result!; },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnRanToCompletion,
+                TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>
+    /// Runs the real transposition backwards: takes the correct sample phrase and produces what the
+    /// same keys would have typed on a layout of another script. Returns null when no usable pair of
+    /// installed layouts exists, leaving the canned sample in place. Worker-thread only.
+    /// </summary>
+    private string? ComputeTypedWrong(string phrase, IReadOnlyList<LanguageInfo> installed)
+    {
+        try
+        {
+            if (!ScriptClassifier.TrySingleScript(phrase, out var script)) return null;
+
+            LanguageInfo? native = null;
+            LanguageInfo? other = null;
+            foreach (var l in installed)
+            {
+                if (LayoutTransposer.GetLayoutScript(l.Hkl) == script) native ??= l;
+                else other ??= l;
+            }
+            if (native == null || other == null) return null;
+
+            var typedWrong = LayoutTransposer.Transpose(phrase, native.Hkl, other.Hkl);
+            return typedWrong == phrase ? null : typedWrong;
+        }
+        catch (Exception ex)
+        {
+            // A preview is never worth failing the settings window over; the canned pair stands in.
+            _reporter.Report("SettingsViewModel.ConvertPreview", ex);
+            return null;
+        }
+    }
+
     public ObservableCollection<string> AvailableCodes
     {
         get
@@ -611,6 +719,10 @@ public sealed class SettingsViewModel : BindableBase
             case nameof(EffectiveStripOpacity):
             case nameof(PreviewCode):
             case nameof(PreviewColor):
+            // Display-only, and now set from an async continuation that lands AFTER the constructor
+            // has armed dirty tracking — without this the settings window would open already dirty.
+            case nameof(ConvertPreviewFrom):
+            case nameof(ConvertPreviewTo):
             case nameof(CaretHorizontalManual):
             case nameof(CaretPreviewOffsetX):
             case nameof(CaretPreviewOffsetY):
@@ -712,6 +824,12 @@ public sealed class SettingsViewModel : BindableBase
         _idleSeconds = s.IdleReset.IdleSeconds;
         _idleTarget = s.IdleReset.TargetLang;
 
+        _convertEnabled = s.ConvertSelection.Enabled;
+        _convertMaxLength = Math.Clamp(s.ConvertSelection.MaxLength, 10, 2000);
+        _convertBlockMultiline = s.ConvertSelection.BlockMultiline;
+        _convertReselect = s.ConvertSelection.ReselectAfterConvert;
+        _convertShowChip = s.ConvertSelection.ShowChip;
+
         _autostart = _startup.IsEnabled();
     }
 
@@ -794,6 +912,12 @@ public sealed class SettingsViewModel : BindableBase
         s.IdleReset.IdleSeconds = Math.Max(5, IdleSeconds);
         s.IdleReset.TargetLang = (IdleTarget ?? "en").ToLowerInvariant();
 
+        s.ConvertSelection.Enabled = ConvertEnabled;
+        s.ConvertSelection.MaxLength = Math.Clamp(ConvertMaxLength, 10, 2000);
+        s.ConvertSelection.BlockMultiline = ConvertBlockMultiline;
+        s.ConvertSelection.ReselectAfterConvert = ConvertReselect;
+        s.ConvertSelection.ShowChip = ConvertShowChip;
+
         s.General.Autostart = Autostart;
 
         // Persist the chosen language code (not the whole pack — only the code is stable across
@@ -806,6 +930,8 @@ public sealed class SettingsViewModel : BindableBase
             _localization.SetLanguage(chosenCode);
             // The UI language may have flipped LTR/RTL — refresh the idle-preview arrow direction.
             RaisePropertyChanged(nameof(IsRtl));
+            // The conversion preview is built from a phrase in the UI language, so it changes too.
+            RefreshConvertPreview();
         }
 
         _settings.Save();

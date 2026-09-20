@@ -8,6 +8,7 @@ public sealed class AppSettings
     public MouseLabelSettings MouseLabel { get; set; } = new();
     public TaskbarStripSettings TaskbarStrip { get; set; } = new();
     public IdleResetSettings IdleReset { get; set; } = new();
+    public ConvertSelectionSettings ConvertSelection { get; set; } = new();
     public GeneralSettings General { get; set; } = new();
 }
 
@@ -41,15 +42,16 @@ public sealed class CaretLabelSettings : ILabelStyleSettings
     /// </summary>
     public string HorizontalMode { get; set; } = "auto";
 
-    /// <summary>Gap in DIPs between the caret and the chip when <see cref="HorizontalMode"/> is
-    /// "auto". Non-negative; the side (left/right) is chosen from the language direction.</summary>
+    /// <summary>Gap in SCREEN PIXELS between the caret and the chip when <see cref="HorizontalMode"/>
+    /// is "auto". Non-negative; the side (left/right) is chosen from the language direction.</summary>
     public int HorizontalDistance { get; set; } = 20;
 
-    /// <summary>Horizontal offset of the chip's CENTRE from the caret, in DIPs. 0 centres the chip on
-    /// the caret; positive moves it right, negative left. Used when <see cref="HorizontalMode"/> is "offset".</summary>
+    /// <summary>Horizontal offset of the chip's CENTRE from the caret, in SCREEN PIXELS. 0 centres the
+    /// chip on the caret; positive moves it right, negative left. Used when <see cref="HorizontalMode"/>
+    /// is "offset".</summary>
     public int OffsetX { get; set; } = 0;
-    /// <summary>Vertical offset of the chip's CENTRE from the caret, in DIPs. 0 centres the chip on the
-    /// caret line; positive moves it UP, negative DOWN.</summary>
+    /// <summary>Vertical offset of the chip's CENTRE from the caret, in SCREEN PIXELS. 0 centres the
+    /// chip on the caret line; positive moves it UP, negative DOWN.</summary>
     public int OffsetY { get; set; } = 0;
     public string Font { get; set; } = "Segoe UI";
     public int Size { get; set; } = 11;
@@ -78,7 +80,7 @@ public sealed class CaretLabelSettings : ILabelStyleSettings
 public sealed class MouseLabelSettings : ILabelStyleSettings
 {
     public bool Enabled { get; set; } = false;
-    /// <summary>Offset from the cursor hotspot, in DIPs. Horizontally the chip is CENTRED on the tip
+    /// <summary>Offset from the cursor hotspot, in SCREEN PIXELS. Horizontally the chip is CENTRED on the tip
     /// (X positive-right); vertically its TOP edge sits at the tip when OffsetY is 0, so the chip
     /// hangs below the cursor like a tooltip (Y positive-up). The default 24,2 nudges the chip to the
     /// right of the cursor and just above the tip.</summary>
@@ -165,6 +167,43 @@ public sealed class IdleResetSettings
     public bool Enabled { get; set; } = false;
     public int IdleSeconds { get; set; } = 120;
     public string TargetLang { get; set; } = "en";
+}
+
+/// <summary>
+/// "Convert selection": switching keyboard layout while text is selected re-types that text as
+/// though it had been typed on the right layout.
+///
+/// <para>This is the only feature that WRITES into the user's documents, so the defaults are picked
+/// to make a wrong guess cheap rather than to maximise how often it fires. It ships enabled because
+/// a correction feature nobody discovers is a feature that does not exist — the length cap, the
+/// single-script rule and the reversibility check are what make that safe.</para>
+/// </summary>
+public sealed class ConvertSelectionSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Longest selection to convert, in characters. The real safety rail: nobody types more than a
+    /// sentence or two before noticing the wrong layout, so anything longer is far more likely to be
+    /// a Ctrl+A than a mistake worth fixing — and it is precisely the case the user could not easily
+    /// undo by hand.
+    /// </summary>
+    public int MaxLength { get; set; } = 120;
+
+    /// <summary>
+    /// Leave the converted text selected afterwards. This is what makes the undo story work: switch
+    /// language once more and the same selection converts straight back, with no undo stack needed.
+    /// </summary>
+    public bool ReselectAfterConvert { get; set; } = true;
+
+    /// <summary>Flash a small chip at the caret after a conversion. A silent edit to someone's
+    /// document is alarming; the same edit announced is understood. Feedback is the only signal
+    /// this feature gives, so turning it off is deliberately a choice, not the default.</summary>
+    public bool ShowChip { get; set; } = true;
+
+    /// <summary>Refuse selections containing a line break. A paragraph is almost always a deliberate
+    /// block of text rather than a sentence typed in the wrong layout.</summary>
+    public bool BlockMultiline { get; set; } = true;
 }
 
 public sealed class GeneralSettings

@@ -216,8 +216,16 @@ public sealed class CaretOverlayPresenter : IOverlayPresenter
         }
 
         var settings = _settings.Current.CaretLabel;
-        var labelHeight = _overlay.ActualHeight > 0 ? _overlay.ActualHeight : DefaultLabelHeightDip;
-        var labelWidth = _overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip;
+
+        // The caret rect is in SCREEN PIXELS while the chip measures itself in DIPs, and
+        // PositionInScreenPixels divides the whole sum back out by the DPI — so the two cannot be
+        // added until the chip's own size is scaled up. Left mixed, the chip drifted by a quarter of
+        // its size at this user's 125% and by half at 200%. The user's stored offsets below are NOT
+        // scaled: they have always been applied in pixels, and reinterpreting them now would silently
+        // move every chip anyone had already tuned.
+        var dpi = _overlay.DpiScale;
+        var labelHeight = (_overlay.ActualHeight > 0 ? _overlay.ActualHeight : DefaultLabelHeightDip) * dpi.Y;
+        var labelWidth = (_overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip) * dpi.X;
         var caret = info.ScreenRect;
 
         // The chip is anchored by its CENTRE: offset (0,0) centres it on the caret, and the user

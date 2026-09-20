@@ -66,6 +66,35 @@ internal static class NativeMethods
     // window (ours included) to a glass outline during the peek, so the overlay vanishes.
     public const int DWMWA_EXCLUDED_FROM_PEEK = 12;
 
+    // ---- Keyboard layout transposition (ToUnicodeEx / MapVirtualKeyEx) ----
+    public const uint MAPVK_VSC_TO_VK_EX = 3;
+    public const int VK_SHIFT = 0x10;
+    public const int VK_CONTROL = 0x11;
+    public const int VK_MENU = 0x12;     // Alt
+    public const int VK_LWIN = 0x5B;
+    public const int VK_RWIN = 0x5C;
+    public const int VK_SPACE = 0x20;
+    public const int VK_LEFT = 0x25;
+    public const uint SCAN_SPACE = 0x39;
+
+    // ---- SendInput ----
+    public const uint INPUT_KEYBOARD = 1;
+    public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const uint KEYEVENTF_UNICODE = 0x0004;
+
+    // Stamped into dwExtraInfo on every keystroke OopsType synthesizes, so the low-level keyboard
+    // hook can tell our own injected text apart from something the user actually typed. Without
+    // it, converting a selection would look like a burst of user activity and reset the idle
+    // timer. An arbitrary but distinctive constant — collisions with other injectors are what the
+    // magic number's size is for.
+    public static readonly IntPtr InjectedSignature = new(0x0075_0053);
+
+    // Byte offset of KBDLLHOOKSTRUCT.dwExtraInfo: four DWORDs, then the pointer field (which the
+    // x64 ABI aligns to 8, landing it at 16 on both architectures). Read directly rather than
+    // marshalling the whole struct — this runs inside the LL hook callback on every keystroke.
+    public const int KbdLLHookExtraInfoOffset = 16;
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -115,6 +144,48 @@ internal static class NativeMethods
         public uint flags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    // SendInput's INPUT union. We only ever send keyboard events, but the struct must still be
+    // laid out (and sized) as the full union or SendInput rejects the array with ERROR_INVALID_PARAMETER.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT
+    {
+        public uint type;
+        public INPUTUNION u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct INPUTUNION
+    {
+        [FieldOffset(0)] public MOUSEINPUT mi;
+        [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx, dy;
+        public uint mouseData, dwFlags, time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL, wParamH;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -218,6 +289,27 @@ internal static class NativeMethods
         [In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
 
     // ---- kernel32 ----
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    public static extern uint MapVirtualKeyEx(uint uCode, uint uMapType, IntPtr dwhkl);
+
+    /// <summary>
+    /// Translates a virtual key + keyboard state into the character(s) a given layout produces.
+    /// Return value: &gt;0 = that many chars written, 0 = no translation, &lt;0 = a DEAD key (which
+    /// also leaves per-thread state behind — see LayoutTransposer for the flush protocol).
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern int ToUnicodeEx(uint wVirtKey, uint wScanCode, byte[] lpKeyState,
+        [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pwszBuff, int cchBuff, uint wFlags, IntPtr dwhkl);
+
+    [DllImport("user32.dll", EntryPoint = "GetKeyboardLayoutList")]
+    public static extern int GetKeyboardLayoutList(int nBuff, [Out] IntPtr[]? lpList);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetLocaleInfoW(uint Locale, uint LCType,
         StringBuilder lpLCData, int cchData);

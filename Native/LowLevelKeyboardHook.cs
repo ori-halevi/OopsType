@@ -82,7 +82,8 @@ internal sealed class LowLevelKeyboardHook : IDisposable
             if (nCode >= 0)
             {
                 int msg = wParam.ToInt32();
-                if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
+                if ((msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
+                    && !IsOwnInjectedKey(lParam))
                     KeyPressed?.Invoke();
             }
         }
@@ -91,6 +92,23 @@ internal sealed class LowLevelKeyboardHook : IDisposable
             _reporter.Report("LowLevelKeyboardHook.Callback", ex);
         }
         return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    /// <summary>
+    /// True for keystrokes OopsType itself synthesized (the "convert selection" feature types the
+    /// corrected text with SendInput). Those are not user activity: counting them would reset the
+    /// idle timer and make the app look busy on its own behalf.
+    ///
+    /// <para>Reads the single <c>dwExtraInfo</c> field straight out of the KBDLLHOOKSTRUCT rather
+    /// than marshalling the whole struct — this runs on every keystroke inside the LL hook, where
+    /// the <c>LowLevelHooksTimeout</c> budget makes allocation-free the only acceptable shape.
+    /// Only OUR signature is filtered; injected input from other tools (AutoHotkey, on-screen
+    /// keyboards) still counts as real typing, because for those it is.</para>
+    /// </summary>
+    private static bool IsOwnInjectedKey(IntPtr lParam)
+    {
+        if (lParam == IntPtr.Zero) return false;
+        return Marshal.ReadIntPtr(lParam, NativeMethods.KbdLLHookExtraInfoOffset) == NativeMethods.InjectedSignature;
     }
 
     public void Dispose()

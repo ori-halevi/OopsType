@@ -129,6 +129,11 @@ public sealed class TrayPresenter : ITrayPresenter
             () => _settings.Current.IdleReset.Enabled,
             v => _settings.Current.IdleReset.Enabled = v));
 
+        menu.Items.Add(BuildToggleItem(
+            "Tray_Toggle_Convert",
+            () => _settings.Current.ConvertSelection.Enabled,
+            v => _settings.Current.ConvertSelection.Enabled = v));
+
         menu.Items.Add(new WinForms.ToolStripSeparator());
         AddTranslatedItem(menu, "Tray_Quit", (_, _) =>
             Safe.Invoke(_reporter, "TrayPresenter.Quit", () => System.Windows.Application.Current?.Shutdown()));

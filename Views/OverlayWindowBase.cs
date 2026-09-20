@@ -122,6 +122,17 @@ public abstract class OverlayWindowBase : Window
             NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
     }
 
+    /// <summary>
+    /// Device pixels per DIP for the monitor this overlay is on, from the same cache
+    /// <see cref="PositionInScreenPixels"/> uses (so it is invalidated together on a DPI change).
+    ///
+    /// <para>Presenters need this because the values they combine come in two different units: rects
+    /// from the caret/cursor APIs are screen pixels, while anything WPF measures — <c>ActualWidth</c>,
+    /// <c>ActualHeight</c> — is DIPs. Scaling the measured side up before adding keeps a chip centred
+    /// at any display scale.</para>
+    /// </summary>
+    public (double X, double Y) DpiScale => GetDpi();
+
     public void PositionInScreenPixels(double xPx, double yPx)
     {
         var dpi = GetDpi();

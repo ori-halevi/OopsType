@@ -262,7 +262,13 @@ public sealed class MouseOverlayPresenter : IOverlayPresenter
         if (!NativeMethods.GetCursorPos(out var p)) return;
 
         var settings = _settings.Current.MouseLabel;
-        var labelWidth = _overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip;
+
+        // Cursor position is in SCREEN PIXELS, ActualWidth is in DIPs, and PositionInScreenPixels
+        // divides the sum by the DPI — so the chip's own size has to be scaled up before it can be
+        // subtracted, or the centring is off by a fraction of the chip at any DPI above 100%. The
+        // stored offsets stay in pixels, which is how they have always been applied.
+        var labelWidth = (_overlay.ActualWidth > 0 ? _overlay.ActualWidth : DefaultLabelWidthDip)
+                         * _overlay.DpiScale.X;
 
         // Horizontally the chip is CENTRED on the cursor hotspot; vertically its TOP edge sits at the
         // hotspot when OffsetY is 0, so the chip hangs below the tip like a tooltip. Offsets move it

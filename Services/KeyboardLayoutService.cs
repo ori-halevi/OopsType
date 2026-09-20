@@ -20,24 +20,6 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(80);
 
-    // Transient shell/system surfaces that briefly steal the foreground but never represent a place
-    // the user is typing: the taskbar itself, the Win11 quick-settings (network/sound/battery)
-    // flyout, the notification/calendar flyout, task view, and the IME/language switch popup. Each
-    // runs on a shell UI thread that carries its OWN input locale, unrelated to the app the user was
-    // actually typing in. If we let one drive the indicator, clicking it flips the chip + strip
-    // colors and closing it flips them back — a spurious inversion. While one of these holds the
-    // foreground we keep showing the last real app's layout instead.
-    private static readonly HashSet<string> TransientShellClasses = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Shell_TrayWnd",                        // primary taskbar
-        "Shell_SecondaryTrayWnd",               // taskbar on secondary monitors
-        "TrayNotifyWnd",                        // notification area / clock region
-        "ControlCenterWindow",                  // Win11 quick settings (network / sound / battery)
-        "TopLevelWindowForOverflowXamlIsland",  // taskbar corner / system-tray overflow
-        "Shell_InputSwitchTopLevelWindow",      // language / input-method switch popup
-        "MultitaskingViewFrame",                // task view (Win+Tab)
-        "XamlExplorerHostIslandWindow",         // Win11 start / search / widgets host
-    };
 
     private readonly IErrorReporter _reporter;
     private readonly DispatcherTimer _pollTimer;
@@ -157,14 +139,14 @@ public sealed class KeyboardLayoutService : IKeyboardLayoutService
     /// <summary>
     /// Resolves the layout of the foreground app's input target, or <c>null</c> when the foreground
     /// is something we should ignore (no window, or a transient shell surface — see
-    /// <see cref="TransientShellClasses"/>) so the caller can hold the last real value.
+    /// <see cref="ShellWindowClasses"/>) so the caller can hold the last real value.
     /// </summary>
     private static LanguageInfo? GetForegroundLayout()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return null;
 
-        if (TransientShellClasses.Contains(NativeMethods.GetWindowClass(hwnd)))
+        if (ShellWindowClasses.IsTransient(NativeMethods.GetWindowClass(hwnd)))
             return null;
 
         var hkl = NativeMethods.GetKeyboardLayout(ResolveInputThread(hwnd));

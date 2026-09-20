@@ -7,6 +7,7 @@ using OopsType.Infrastructure;
 using OopsType.Services;
 using OopsType.Services.Localization;
 using OopsType.Services.Overlays;
+using OopsType.Services.TextFix;
 using OopsType.ViewModels;
 using OopsType.Views;
 using Prism.Ioc;
@@ -64,6 +65,7 @@ public partial class App
         c.RegisterSingleton<ICaretLocationService, CaretLocationService>();
         c.RegisterSingleton<IKeyboardActivityService, KeyboardActivityService>();
         c.RegisterSingleton<IIdleResetService, IdleResetService>();
+        c.RegisterSingleton<IConvertSelectionService, ConvertSelectionService>();
         c.RegisterSingleton<ITaskbarService, TaskbarService>();
         c.RegisterSingleton<IStartupService, StartupService>();
 
@@ -71,27 +73,32 @@ public partial class App
         c.RegisterSingleton<CaretOverlayPresenter>();
         c.RegisterSingleton<MouseOverlayPresenter>();
         c.RegisterSingleton<TaskbarStripOverlayPresenter>();
+        c.RegisterSingleton<ConvertChipPresenter>();
         c.RegisterSingleton<IOverlayCoordinator, OverlayCoordinator>();
 
         // ---- ViewModels (transient — one instance per overlay/window) ----
         c.Register<CaretLabelViewModel>();
         c.Register<MouseLabelViewModel>();
         c.Register<TaskbarStripViewModel>();
+        c.Register<ConvertChipViewModel>();
         c.Register<SettingsViewModel>();
 
         // ---- Views (transient — overlays are recreated when toggled, settings on each open) ----
         c.Register<CaretLabelOverlay>();
         c.Register<MouseLabelOverlay>();
         c.Register<TaskbarStripOverlay>();
+        c.Register<ConvertChipOverlay>();
         c.Register<SettingsWindow>();
 
         // ---- Factories: let services request fresh VMs/Views without taking a Container reference. ----
         c.RegisterInstance<Func<CaretLabelViewModel>>(() => Container.Resolve<CaretLabelViewModel>());
         c.RegisterInstance<Func<MouseLabelViewModel>>(() => Container.Resolve<MouseLabelViewModel>());
         c.RegisterInstance<Func<TaskbarStripViewModel>>(() => Container.Resolve<TaskbarStripViewModel>());
+        c.RegisterInstance<Func<ConvertChipViewModel>>(() => Container.Resolve<ConvertChipViewModel>());
         c.RegisterInstance<Func<CaretLabelOverlay>>(() => Container.Resolve<CaretLabelOverlay>());
         c.RegisterInstance<Func<MouseLabelOverlay>>(() => Container.Resolve<MouseLabelOverlay>());
         c.RegisterInstance<Func<TaskbarStripOverlay>>(() => Container.Resolve<TaskbarStripOverlay>());
+        c.RegisterInstance<Func<ConvertChipOverlay>>(() => Container.Resolve<ConvertChipOverlay>());
         c.RegisterInstance<Func<SettingsWindow>>(() => Container.Resolve<SettingsWindow>());
 
         // ---- Cross-cutting view services ----

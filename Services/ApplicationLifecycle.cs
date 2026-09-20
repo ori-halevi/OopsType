@@ -21,6 +21,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
     private readonly IKeyboardLayoutService _layout;
     private readonly IKeyboardActivityService _activity;
     private readonly IIdleResetService _idle;
+    private readonly IConvertSelectionService _convert;
     private readonly IOverlayCoordinator _overlays;
     private readonly ITrayPresenter _tray;
     private readonly ISettingsDialog _settingsDialog;
@@ -35,6 +36,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         IKeyboardLayoutService layout,
         IKeyboardActivityService activity,
         IIdleResetService idle,
+        IConvertSelectionService convert,
         IOverlayCoordinator overlays,
         ITrayPresenter tray,
         ISettingsDialog settingsDialog,
@@ -46,6 +48,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         _layout = layout;
         _activity = activity;
         _idle = idle;
+        _convert = convert;
         _overlays = overlays;
         _tray = tray;
         _settingsDialog = settingsDialog;
@@ -62,6 +65,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
         SafeStart("KeyboardLayoutService", _layout.Start);
         SafeStart("KeyboardActivityService", _activity.Start);
         SafeStart("IdleResetService", _idle.Start);
+        SafeStart("ConvertSelectionService", _convert.Start);
         SafeStart("OverlayCoordinator", _overlays.Start);
         SafeStart("TrayPresenter", _tray.Start);
 
@@ -93,6 +97,7 @@ public sealed class ApplicationLifecycle : IApplicationLifecycle
 
         // Reverse-order teardown so listeners are gone before publishers raise their last events.
         SafeStop("OverlayCoordinator", _overlays.Shutdown);
+        SafeStop("ConvertSelectionService", _convert.Dispose);
         SafeStop("IdleResetService", _idle.Dispose);
         SafeStop("KeyboardActivityService", _activity.Dispose);
         SafeStop("KeyboardLayoutService", _layout.Dispose);

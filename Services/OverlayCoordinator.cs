@@ -28,6 +28,9 @@ public sealed class OverlayCoordinator : IOverlayCoordinator
     // Single low-frequency timer used by every presenter to re-assert window state (topmost,
     // strip position when the taskbar moves, etc.). Having one shared timer keeps WPF dispatcher
     // load down compared to one timer per overlay.
+    // This interval also bounds how fast the taskbar strip reacts to a full-screen app; see the
+    // "KNOWN, ACCEPTED" note in TaskbarStripOverlayPresenter.Position before shortening it to
+    // chase that lag.
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMilliseconds(1500);
 
     // Periodicity for hook re-install check and uptime breadcrumbs. Both are sampled inside
@@ -57,14 +60,15 @@ public sealed class OverlayCoordinator : IOverlayCoordinator
         IKeyboardActivityService activity,
         CaretOverlayPresenter caret,
         MouseOverlayPresenter mouse,
-        TaskbarStripOverlayPresenter strip)
+        TaskbarStripOverlayPresenter strip,
+        ConvertChipPresenter convertChip)
     {
         _settings = settings;
         _reporter = reporter;
         _logger = logger;
         _layout = layout;
         _activity = activity;
-        _presenters = new IOverlayPresenter[] { caret, mouse, strip };
+        _presenters = new IOverlayPresenter[] { caret, mouse, strip, convertChip };
     }
 
     public void Start()

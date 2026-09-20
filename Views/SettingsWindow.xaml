@@ -360,6 +360,16 @@
                         </StackPanel>
                     </RadioButton>
 
+                    <!-- Sits beside Idle reset rather than with the three overlays above: those only
+                         SHOW the active layout, while these two ACT on it. -->
+                    <RadioButton x:Name="NavConvert" Style="{StaticResource NavItem}"
+                                 ToolTip="{loc:T Nav_Convert_Tooltip}">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="ArrowSwap20" FontSize="18" Margin="0,0,10,0"/>
+                            <TextBlock Text="{loc:T Nav_Convert}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
                     <RadioButton x:Name="NavGeneral" Style="{StaticResource NavItem}"
                                  ToolTip="{loc:T Nav_General_Tooltip}">
                         <StackPanel Orientation="Horizontal">
@@ -1134,6 +1144,101 @@
                                                   ToolTip="{loc:T Idle_Target_Tooltip}"/>
                                     </StackPanel>
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ===== Convert selection page ===== -->
+                <ScrollViewer>
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer" BasedOn="{StaticResource PageRoot}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=NavConvert, Path=IsChecked}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="{loc:T Convert_Title}"/>
+                        <TextBlock Style="{StaticResource SectionSubtitle}"
+                                   Text="{loc:T Convert_Subtitle}"/>
+
+                        <!-- Both halves come from the live transposition engine running against the
+                             user's own installed layouts, so this doubles as a self-test: nonsense
+                             here means conversion will not work on this machine. -->
+                        <Border Style="{StaticResource Card}" Background="{DynamicResource PreviewBackground}">
+                            <StackPanel>
+                                <TextBlock Text="{loc:T Convert_PreviewLabel}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SubtleText}"
+                                           Margin="0,0,0,10"/>
+                                <Border Background="{DynamicResource PreviewSurface}"
+                                        BorderBrush="{DynamicResource PreviewBorder}" BorderThickness="1"
+                                        CornerRadius="6" Padding="20,18">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Border Background="#FFF1F5F9" CornerRadius="5" Padding="12,7">
+                                                <TextBlock Text="{Binding ConvertPreviewFrom}"
+                                                           FontSize="16" FontFamily="Consolas"
+                                                           Foreground="#FF9CA3AF"/>
+                                            </Border>
+                                            <!-- The swap glyph is the same one the runtime chip shows,
+                                                 so the preview teaches the symbol the user will meet. -->
+                                            <TextBlock Text="&#x21C4;" FontSize="20" Margin="16,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="#FF2563EB"/>
+                                            <Border Background="#FFECFDF5" CornerRadius="5" Padding="12,7">
+                                                <TextBlock Text="{Binding ConvertPreviewTo}"
+                                                           FontSize="16" FontWeight="SemiBold"
+                                                           Foreground="#FF065F46"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Style="{StaticResource FieldHint}"
+                                                   Margin="0,12,0,0"
+                                                   HorizontalAlignment="Center"
+                                                   Text="{loc:T Convert_PreviewHint}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <ui:ToggleSwitch Content="{loc:T Convert_Enable}"
+                                                 IsChecked="{Binding ConvertEnabled}"
+                                                 ToolTip="{loc:T Convert_Enable_Tooltip}"/>
+
+                                <StackPanel Margin="0,18,0,0" IsEnabled="{Binding ConvertEnabled}">
+                                    <StackPanel Width="280" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{loc:T Convert_MaxLength}"/>
+                                        <ui:NumberBox Value="{Binding ConvertMaxLength, UpdateSourceTrigger=PropertyChanged}"
+                                                      Minimum="10" Maximum="2000" SmallChange="10" LargeChange="50"
+                                                      ToolTip="{loc:T Convert_MaxLength_Tooltip}"/>
+                                        <TextBlock Style="{StaticResource FieldHint}"
+                                                   Text="{loc:T Convert_MaxLength_Tooltip}"/>
+                                    </StackPanel>
+
+                                    <ui:ToggleSwitch Content="{loc:T Convert_BlockMultiline}"
+                                                     IsChecked="{Binding ConvertBlockMultiline}"
+                                                     ToolTip="{loc:T Convert_BlockMultiline_Tooltip}"
+                                                     Margin="0,18,0,0"/>
+
+                                    <ui:ToggleSwitch Content="{loc:T Convert_Reselect}"
+                                                     IsChecked="{Binding ConvertReselect}"
+                                                     ToolTip="{loc:T Convert_Reselect_Tooltip}"
+                                                     Margin="0,12,0,0"/>
+                                    <TextBlock Style="{StaticResource FieldHint}"
+                                               Text="{loc:T Convert_Reselect_Tooltip}"/>
+
+                                    <ui:ToggleSwitch Content="{loc:T Convert_ShowChip}"
+                                                     IsChecked="{Binding ConvertShowChip}"
+                                                     ToolTip="{loc:T Convert_ShowChip_Tooltip}"
+                                                     Margin="0,12,0,0"/>
+                                    <TextBlock Style="{StaticResource FieldHint}"
+                                               Text="{loc:T Convert_ShowChip_Tooltip}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
