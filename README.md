@@ -50,7 +50,7 @@
 
 ### ✨ מה זה עושה
 
-OopsType כולל **ארבע שכבות־על עצמאיות** — מדליקים רק את מה שרוצים, מכבים את השאר.
+OopsType עושה שני דברים: הוא **מראה** לך באיזו שפה אתה מקליד, ואם בכל זאת פספסת — הוא **מתקן**. כל חלק עצמאי; מדליקים רק את מה שרוצים, מכבים את השאר.
 
 | | תכונה | מה היא עושה |
 |:---:|---|---|
@@ -58,6 +58,7 @@ OopsType כולל **ארבע שכבות־על עצמאיות** — מדליקי�
 | 🖱️ | **תווית עכבר** *(Mouse label)* | צ׳יפ קטן שעוקב אחרי הסמן — מושלם לאפליקציות בלי סמן טקסט גלוי (דפי אינטרנט, IDE-ים). מצב **חיסכון** (ברירת מחדל) לא עובד בכלל כשהעכבר במנוחה; מצב **חלקות מקסימלית** מעט מהיר יותר על חשבון פעילות רקע. |
 | 🎨 | **פס צבע בשורת המשימות** *(Taskbar strip)* | פס בצבע שהקצית לשפה הפעילה, נצבע מעל (או מאחורי) שורת המשימות. נראה אפילו בראייה ההיקפית. עובי מתכוונן (3px ועד גובה מלא), עיגון עליון/תחתון, וסדר־Z לפני או מאחורי האייקונים. |
 | ⏱️ | **איפוס בחוסר פעילות** *(Idle reset)* | אחרי N שניות בלי הקשות — מחזיר אוטומטית את החלון לשפת יעד (למשל תמיד חזרה לאנגלית כשקמת מהמחשב). תנועת עכבר לא מאפסת את הטיימר; רק הקשות אמיתיות. |
+| 🔄 | **המרת בחירה** *(Convert selection)* | הקלדת משפט שלם בפריסה הלא נכונה? סמן אותו והחלף שפה — `akuo guko` הופך ל־`שלום עולם`. הטקסט נשאר מסומן, אז החלפה נוספת מחזירה אותו. המיפוי נגזר מ־Windows עצמו לפי המקש הפיזי, אז כל פריסה מותקנת עובדת בלי טבלאות. לא נוגע ב־clipboard, ומוותר על ההמרה בטקסט ארוך מדי, מעורב־שפות או לקריאה בלבד. |
 | 🌐 | **ממשק רב־לשוני** | חלון ההגדרות ותפריט המגש מתורגמים דרך קובצי JSON פשוטים. בחירת שפה מ־**כללי → שפת היישום** מוחלת מיד, כולל היפוך RTL לשפות מימין־לשמאל. |
 
 > 🎨 כל הצבעים מתכווננים — בצילומים למעלה עברית הוקצתה לירוק ואנגלית לאדום, אבל אתה בוחר.
@@ -102,7 +103,7 @@ dotnet publish -c Release -r win-x64 --self-contained true `
 | פעולה | איך |
 |---|---|
 | פתיחת הגדרות | לחיצה כפולה על האייקון, או קליק ימני ← **Settings…** |
-| הדלקה/כיבוי מהיר של שכבה | קליק ימני על המגש ← סימון **Caret / Mouse / Taskbar / Idle reset** |
+| הדלקה/כיבוי מהיר של תכונה | קליק ימני על המגש ← סימון **Caret / Mouse / Taskbar / Idle reset / Convert selection** |
 | יציאה | קליק ימני ← **Quit** |
 
 חלון ההגדרות כולל **תצוגה מקדימה חיה** לכל שכבה — מכוונים מרווחים, גופנים וצבעים ורואים את התוצאה מיד, בלי לשמור.
@@ -135,7 +136,7 @@ OopsType solves this by putting the layout indicator **where your attention alre
 
 ### Features
 
-OopsType ships four independent overlays you can mix and match — turn on only what you want.
+OopsType does two things: it **shows** you which language you are typing in, and when you miss it anyway, it **fixes** what you typed. Every part is independent — turn on only what you want.
 
 **1. Caret label** — a tiny floating chip that hovers above your text caret in whatever app currently has focus, showing the active layout (e.g. `EN`, `עב`, `РУ`). It hides automatically over menus, tooltips and other places a caret would be a lie. Uses Windows `GUITHREADINFO` first, then falls back to UI Automation's `TextPattern` for apps that don't expose a Win32 caret.
 
@@ -153,7 +154,13 @@ Also respects cursor-hide events (video players, touch input) — when Windows h
 
 **4. Idle reset** — optional auto-revert: after N seconds without keypresses, switch the focused window's layout to a target language (e.g. always back to English when you walk away). One-shot per idle stretch — it won't fight you while you continue to idle. Mouse movement doesn't reset the timer; only real keystrokes do.
 
-**5. Multi-language UI** — the settings window and tray menu are translatable via plain JSON files. Pick a language from **General → Application language**; switching applies live, including right-to-left layout flip for RTL languages. Adding a new language is a no-code, no-rebuild operation — see [Adding a translation](#adding-a-translation) below.
+**5. Convert selection** — typed a whole sentence in the wrong layout? Select it and switch language: `akuo guko` becomes `שלום עולם`, re-typed as though the right layout had been active all along. The text stays selected, so switching language once more converts it straight back — that is the undo.
+
+The mapping is derived from Windows at runtime and joined on the *physical key*, so any layout you install works with no per-language tables — Russian, Greek, AZERTY, whatever. Your clipboard is never touched: the selection is read and rewritten through UI Automation.
+
+It is deliberately cautious, and does nothing at all when the selection is longer than a sentence or two, mixes more than one script, is read-only, or is already written in the language you switched to (which is just how people retype a word). A brief chip at the caret tells you when it did act.
+
+**6. Multi-language UI** — the settings window and tray menu are translatable via plain JSON files. Pick a language from **General → Application language**; switching applies live, including right-to-left layout flip for RTL languages. Adding a new language is a no-code, no-rebuild operation — see [Adding a translation](#adding-a-translation) below.
 
 ### Installing
 
@@ -193,7 +200,7 @@ Launch `OopsType.exe`. A small tray icon appears in the notification area.
 | Action | How |
 |---|---|
 | Open settings | Double-click the tray icon, or right-click → **Settings…** |
-| Quickly toggle an overlay | Right-click tray → check/uncheck **Caret label / Mouse label / Taskbar strip / Idle reset** |
+| Quickly toggle a feature | Right-click tray → check/uncheck **Caret label / Mouse label / Taskbar strip / Idle reset / Convert selection** |
 | Quit | Right-click tray → **Quit** |
 
 The settings window has a live preview for every overlay, so you can dial in offsets, fonts and colors and see the result immediately without saving.
